@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>天気まとめ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#050d1a;--card:#0f1f3a;
+  --accent:#00d4ff;--accent2:#7b68ee;--accent3:#ff6b6b;
+  --moon:#f5c842;--text:#e8f4fd;--muted:#5a7fa0;
+  --glow:rgba(0,212,255,0.15);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'Noto Sans JP',sans-serif;min-height:100vh;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse at 20% 20%,rgba(0,100,200,.12) 0%,transparent 50%),radial-gradient(ellipse at 80% 80%,rgba(100,50,200,.08) 0%,transparent 50%);pointer-events:none;z-index:0;}
+.stars{position:fixed;inset:0;pointer-events:none;z-index:0;}
+.star{position:absolute;background:#fff;border-radius:50%;animation:twinkle var(--d,3s) var(--delay,0s) infinite alternate;}
+@keyframes twinkle{from{opacity:.1}to{opacity:.8}}
+.wrap{position:relative;z-index:1;max-width:480px;margin:0 auto;padding:0 14px 64px;}
+
+/* ── Header ── */
+.app-header{display:flex;align-items:center;justify-content:space-between;padding:14px 0 6px;}
+.app-header-left .app-lbl{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.3em;color:var(--accent);text-transform:uppercase;margin-bottom:3px;opacity:.8;}
+.app-header-left .app-name{font-size:14px;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.app-header-moon{font-size:11px;color:var(--moon);font-family:'Space Mono',monospace;text-align:right;line-height:1.5;}
+
+/* ── 今週の予定バー ── */
+.week-bar{margin-bottom:10px;}
+.week-bar-lbl{font-size:10px;color:var(--muted);letter-spacing:.15em;font-family:'Space Mono',monospace;text-transform:uppercase;margin-bottom:5px;}
+.week-win{position:relative;background:var(--card);border:1px solid rgba(255,255,255,.07);border-radius:12px;overflow:hidden;}
+.week-win::before,.week-win::after{content:'';position:absolute;top:0;bottom:0;width:22px;z-index:2;pointer-events:none;}
+.week-win::before{left:0;background:linear-gradient(90deg,var(--card),transparent);}
+.week-win::after{right:0;background:linear-gradient(270deg,var(--card),transparent);}
+.week-inner{display:flex;overflow-x:auto;overflow-y:hidden;padding:8px 6px;scrollbar-width:none;-webkit-overflow-scrolling:touch;}
+.week-inner::-webkit-scrollbar{display:none;}
+.wsc{flex-shrink:0;background:rgba(255,255,255,.04);border-right:1px solid rgba(255,255,255,.05);padding:7px 12px;cursor:pointer;transition:background .15s;}
+.wsc:last-child{border-right:none;}
+.wsc:hover{background:rgba(0,212,255,.1);}
+.wsc.wsc-today{background:rgba(0,212,255,.08);border-bottom:2px solid var(--accent);}
+.wsc.wsc-past{opacity:.45;}
+.wsc-date{font-size:10px;color:var(--accent);font-family:'Space Mono',monospace;margin-bottom:2px;white-space:nowrap;}
+.wsc-title{font-size:12px;font-weight:700;white-space:nowrap;max-width:130px;overflow:hidden;text-overflow:ellipsis;}
+.wsc-time{font-size:10px;color:var(--muted);margin-top:1px;white-space:nowrap;}
+.week-empty{padding:11px 14px;color:var(--muted);font-size:12px;white-space:nowrap;}
+
+/* ── Nav ── */
+.top-nav{display:flex;gap:4px;margin-bottom:12px;background:var(--card);border-radius:13px;padding:4px;}
+.nav-btn{flex:1;padding:8px 2px;border:none;border-radius:9px;background:transparent;color:var(--muted);font-size:11px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;transition:all .2s;white-space:nowrap;}
+.nav-btn.active{background:linear-gradient(135deg,rgba(0,212,255,.2),rgba(123,104,238,.2));color:var(--text);border:1px solid rgba(0,212,255,.3);}
+
+/* ── Panels ── */
+.panel{display:none;}.panel.active{display:block;}
+
+/* ── Location Block ── */
+.loc-block{margin-bottom:16px;}
+.loc-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.loc-title{font-size:15px;font-weight:700;}
+.loc-sub{font-size:10px;color:var(--muted);margin-top:2px;}
+.loc-refresh{background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.2);border-radius:8px;padding:5px 9px;color:var(--accent);font-size:11px;cursor:pointer;font-family:'Noto Sans JP',sans-serif;}
+
+/* ── Hero card ── */
+.hero-card{background:linear-gradient(135deg,var(--card),#0c1d38);border:1px solid rgba(0,212,255,.15);border-radius:18px;padding:16px;margin-bottom:10px;position:relative;overflow:hidden;}
+.hero-card::before{content:'';position:absolute;top:-22px;right:-22px;width:90px;height:90px;background:radial-gradient(circle,rgba(0,212,255,.1),transparent 70%);border-radius:50%;}
+.hero-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.hero-icon{font-size:52px;filter:drop-shadow(0 0 10px rgba(0,212,255,.35));}
+.hero-right{text-align:right;}
+.hero-temp{font-family:'Space Mono',monospace;font-size:48px;font-weight:700;background:linear-gradient(135deg,#fff,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1;}
+.hero-desc{font-size:13px;font-weight:700;margin-top:3px;}
+.hero-range{font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;}
+.hero-mini{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;}
+.hm{text-align:center;background:rgba(255,255,255,.04);border-radius:8px;padding:6px 3px;}
+.hm-lbl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:3px;}
+.hm-val{font-family:'Space Mono',monospace;font-size:12px;font-weight:700;}
+.hm-unit{font-size:9px;color:var(--muted);}
+
+/* ── Moon card ── */
+.moon-card{background:linear-gradient(135deg,#0d0a2a,#1a0d3a);border:1px solid rgba(245,200,66,.2);border-radius:14px;padding:12px 14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;}
+.moon-emoji{font-size:40px;filter:drop-shadow(0 0 8px rgba(245,200,66,.4));flex-shrink:0;}
+.moon-info{}
+.moon-phase-name{font-size:13px;font-weight:700;color:var(--moon);margin-bottom:2px;}
+.moon-age{font-family:'Space Mono',monospace;font-size:11px;color:rgba(245,200,66,.7);}
+.moon-next{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.5;}
+.moon-bar-wrap{margin-top:5px;height:3px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden;}
+.moon-bar{height:100%;background:linear-gradient(90deg,#f5c842,#fff176);border-radius:2px;}
+
+/* ── Section label ── */
+.sec-lbl{font-size:10px;color:var(--muted);letter-spacing:.15em;font-family:'Space Mono',monospace;text-transform:uppercase;margin-bottom:6px;}
+
+/* ── Scroll window ── */
+.scroll-win{position:relative;background:var(--card);border:1px solid rgba(255,255,255,.07);border-radius:14px;overflow:hidden;margin-bottom:10px;}
+.scroll-win::before,.scroll-win::after{content:'';position:absolute;top:0;bottom:0;width:26px;z-index:2;pointer-events:none;}
+.scroll-win::before{left:0;background:linear-gradient(90deg,var(--card),transparent);}
+.scroll-win::after{right:0;background:linear-gradient(270deg,var(--card),transparent);}
+.scroll-inner{display:flex;overflow-x:auto;overflow-y:hidden;padding:9px 7px;scrollbar-width:none;-webkit-overflow-scrolling:touch;scroll-snap-type:x mandatory;}
+.scroll-inner::-webkit-scrollbar{display:none;}
+
+/* ── Hourly cards ── */
+.h-item{background:rgba(255,255,255,.04);border-right:1px solid rgba(255,255,255,.05);padding:9px 9px;text-align:center;min-width:56px;flex-shrink:0;scroll-snap-align:start;cursor:pointer;transition:background .15s;}
+.h-item:last-child{border-right:none;}
+.h-now{background:rgba(0,212,255,.1);border-bottom:2px solid var(--accent);}
+.h-item:hover,.h-item.selected{background:rgba(0,212,255,.18)!important;}
+.h-time{font-size:10px;color:var(--muted);font-family:'Space Mono',monospace;margin-bottom:3px;}
+.h-icon{font-size:19px;line-height:1;margin-bottom:3px;}
+.h-temp{font-size:12px;font-family:'Space Mono',monospace;font-weight:700;}
+.h-rain{font-size:10px;color:#4fc3f7;margin-top:2px;}
+
+/* ── Day cards ── */
+.day-item{background:rgba(255,255,255,.04);border-right:1px solid rgba(255,255,255,.05);padding:10px 9px;text-align:center;min-width:68px;flex-shrink:0;scroll-snap-align:start;cursor:pointer;transition:background .15s;}
+.day-item:last-child{border-right:none;}
+.day-item.today{background:rgba(0,212,255,.08);border-bottom:2px solid var(--accent);}
+.day-item:hover,.day-item.selected{background:rgba(0,212,255,.18)!important;border-bottom:2px solid var(--accent)!important;}
+.day-name{font-size:11px;font-family:'Space Mono',monospace;margin-bottom:3px;color:var(--muted);}
+.day-name.sun{color:#ff6b6b;}.day-name.sat{color:#4fc3f7;}
+.day-ico{font-size:20px;line-height:1;margin-bottom:3px;}
+.day-moon{font-size:11px;margin-bottom:2px;}
+.day-rain{font-size:10px;color:#4fc3f7;margin-bottom:2px;}
+.day-hi{font-family:'Space Mono',monospace;font-size:13px;font-weight:700;}
+.day-lo{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);margin-top:1px;}
+
+/* ── Detail panel ── */
+.detail-panel{display:none;background:linear-gradient(135deg,#0a1f3a,#0d1a30);border:1px solid rgba(0,212,255,.3);border-radius:16px;padding:14px;margin-bottom:10px;position:relative;animation:slideDown .25s ease;}
+.detail-panel.show{display:block;}
+@keyframes slideDown{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+.detail-close{position:absolute;top:10px;right:10px;background:rgba(255,255,255,.08);border:none;border-radius:50%;width:24px;height:24px;color:var(--muted);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.detail-close:hover{background:rgba(255,255,255,.15);color:var(--text);}
+.detail-lbl{font-size:10px;color:var(--accent);letter-spacing:.18em;font-family:'Space Mono',monospace;text-transform:uppercase;margin-bottom:8px;}
+.detail-top{display:flex;align-items:center;gap:12px;margin-bottom:10px;}
+.detail-icon{font-size:42px;filter:drop-shadow(0 0 8px rgba(0,212,255,.3));}
+.detail-temp{font-family:'Space Mono',monospace;font-size:36px;font-weight:700;background:linear-gradient(135deg,#fff,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1;margin-bottom:2px;}
+.detail-desc{font-size:14px;font-weight:700;}
+.detail-sub{font-size:10px;color:var(--muted);margin-top:2px;}
+.detail-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+.dc{background:rgba(255,255,255,.04);border-radius:8px;padding:8px 6px;text-align:center;}
+.dc-l{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:3px;}
+.dc-v{font-family:'Space Mono',monospace;font-size:13px;font-weight:700;}
+.dc-u{font-size:9px;color:var(--muted);}
+
+/* ── Alert ── */
+.alert-box{background:rgba(255,107,107,.1);border:1px solid rgba(255,107,107,.3);border-radius:10px;padding:9px 11px;margin-bottom:10px;font-size:12px;color:var(--accent3);display:none;line-height:1.6;}
+.alert-box.show{display:block;}
+
+/* ── Loading ── */
+.loc-loading{text-align:center;padding:28px;color:var(--muted);font-size:12px;}
+.mini-spin{display:inline-block;width:15px;height:15px;border:2px solid rgba(0,212,255,.1);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite;vertical-align:middle;margin-right:5px;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.updated-at{text-align:right;font-size:10px;color:var(--muted);font-family:'Space Mono',monospace;margin-bottom:6px;}
+.divider{height:1px;background:rgba(255,255,255,.06);margin:14px 0;}
+.hourly-wrap{margin-bottom:10px;}
+.weekly-wrap{margin-bottom:10px;}
+
+/* ── Search panel ── */
+.search-wrap{display:flex;gap:8px;margin-bottom:12px;}
+.loc-input{flex:1;background:var(--card);border:1px solid rgba(0,212,255,.2);border-radius:12px;padding:12px 14px;color:var(--text);font-size:15px;font-family:'Noto Sans JP',sans-serif;outline:none;transition:border-color .3s;}
+.loc-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--glow);}
+.srch-btn{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:12px;padding:12px 16px;color:#000;font-weight:700;font-size:14px;cursor:pointer;transition:transform .1s;white-space:nowrap;}
+.srch-btn:active{transform:scale(.97);}
+.srch-btn:disabled{opacity:.5;cursor:not-allowed;}
+.srch-loading{display:none;flex-direction:column;align-items:center;gap:12px;padding:32px 0;}
+.srch-loading.show{display:flex;}
+.srch-loader{width:34px;height:34px;border:3px solid rgba(0,212,255,.1);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite;}
+.srch-error{display:none;text-align:center;padding:24px 16px;}
+.srch-error.show{display:block;}
+.srch-result{display:none;}.srch-result.show{display:block;}
+.m-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;}
+.m-card{background:var(--card);border:1px solid rgba(255,255,255,.06);border-radius:13px;padding:12px 11px;}
+.m-lbl{font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;font-family:'Space Mono',monospace;margin-bottom:5px;}
+.m-val{font-family:'Space Mono',monospace;font-size:20px;font-weight:700;}
+.m-unit{font-size:10px;color:var(--muted);font-weight:400;margin-left:2px;}
+.m-sub{font-size:10px;color:var(--muted);margin-top:2px;}
+.bar-w{margin-top:5px;height:3px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden;}
+.bar{height:100%;border-radius:2px;transition:width 1s ease;width:0%;}
+.bar-y{background:linear-gradient(90deg,#ffd740,#ffab40);}
+.src-wrap{background:var(--card);border:1px solid rgba(255,255,255,.06);border-radius:11px;padding:11px;margin-bottom:10px;}
+.src-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;}
+.src-tag{background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.2);border-radius:20px;padding:3px 8px;font-size:10px;color:var(--accent);font-family:'Space Mono',monospace;}
+.ref-btn{width:100%;background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.25);border-radius:11px;padding:11px;color:var(--accent);font-size:13px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;margin-top:4px;transition:background .2s;}
+.ref-btn:hover{background:rgba(0,212,255,.15);}
+
+/* ── 予定・メモ ── */
+.memo-section{margin-bottom:18px;}
+.memo-section-title{font-size:13px;font-weight:700;margin-bottom:10px;}
+.sched-form{background:var(--card);border:1px solid rgba(0,212,255,.15);border-radius:14px;padding:14px;margin-bottom:12px;}
+.form-row{display:flex;gap:8px;margin-bottom:8px;}
+.form-row:last-child{margin-bottom:0;}
+.fi{flex:1;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:10px 12px;color:var(--text);font-size:13px;font-family:'Noto Sans JP',sans-serif;outline:none;transition:border-color .2s;}
+.fi:focus{border-color:var(--accent);}
+.fi-date{flex:none;width:140px;}
+.fi-time{flex:none;width:100px;}
+.add-btn{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:9px;padding:10px 16px;color:#000;font-weight:700;font-size:13px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;white-space:nowrap;}
+.sched-list{display:flex;flex-direction:column;gap:7px;}
+.sched-item{background:var(--card);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:12px 14px;display:flex;align-items:flex-start;gap:10px;}
+.sched-item.past{opacity:.5;}
+.sched-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0;margin-top:5px;}
+.sched-dot.memo{background:var(--accent2);}
+.sched-content{flex:1;}
+.sched-title{font-size:13px;font-weight:700;margin-bottom:3px;}
+.sched-datetime{font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;}
+.sched-note{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.5;}
+.sched-del{background:rgba(255,107,107,.1);border:1px solid rgba(255,107,107,.2);border-radius:6px;padding:3px 8px;color:var(--accent3);font-size:11px;cursor:pointer;flex-shrink:0;}
+.sched-del:hover{background:rgba(255,107,107,.25);}
+.empty-msg{text-align:center;padding:24px;color:var(--muted);font-size:13px;}
+.memo-form{background:var(--card);border:1px solid rgba(123,104,238,.2);border-radius:14px;padding:14px;margin-bottom:12px;}
+.memo-ta{width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:10px 12px;color:var(--text);font-size:13px;font-family:'Noto Sans JP',sans-serif;outline:none;resize:vertical;min-height:80px;}
+.memo-ta:focus{border-color:var(--accent2);}
+.memo-add-btn{background:linear-gradient(135deg,var(--accent2),#9c88ff);border:none;border-radius:9px;padding:9px 16px;color:#fff;font-weight:700;font-size:13px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;margin-top:8px;width:100%;}
+.memo-item{background:linear-gradient(135deg,rgba(123,104,238,.08),rgba(123,104,238,.04));border:1px solid rgba(123,104,238,.2);border-radius:12px;padding:12px 14px;display:flex;gap:10px;align-items:flex-start;margin-bottom:7px;}
+.memo-body{flex:1;}
+.memo-text{font-size:13px;line-height:1.6;white-space:pre-wrap;}
+.memo-time{font-size:10px;color:var(--muted);font-family:'Space Mono',monospace;margin-top:5px;}
+
+/* ── 月齢詳細 ── */
+.moon-detail-card{background:linear-gradient(135deg,#0d0a2a,#1a0d3a);border:1px solid rgba(245,200,66,.2);border-radius:14px;padding:16px;margin-bottom:14px;}
+.moon-detail-title{font-size:11px;color:var(--moon);letter-spacing:.2em;font-family:'Space Mono',monospace;text-transform:uppercase;margin-bottom:12px;}
+.moon-phases-row{display:flex;justify-content:space-between;margin-bottom:12px;}
+.moon-phase-item{text-align:center;flex:1;}
+.mpi-icon{font-size:26px;margin-bottom:3px;}
+.mpi-name{font-size:10px;color:var(--moon);opacity:.8;margin-bottom:2px;}
+.mpi-date{font-size:10px;color:var(--muted);font-family:'Space Mono',monospace;}
+.mpi-active .mpi-icon{filter:drop-shadow(0 0 8px var(--moon));}
+.mpi-active .mpi-name{opacity:1;font-weight:700;}
+
+/* ── ブラウザ ── */
+.browser-wrap{display:flex;flex-direction:column;gap:12px;}
+.browser-bar{display:flex;gap:8px;}
+.browser-input{flex:1;background:var(--card);border:1px solid rgba(0,212,255,.25);border-radius:12px;padding:12px 14px;color:var(--text);font-size:15px;font-family:'Noto Sans JP',sans-serif;outline:none;transition:border-color .3s;}
+.browser-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--glow);}
+.browser-go{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:12px;padding:12px 18px;color:#000;font-weight:700;font-size:14px;cursor:pointer;white-space:nowrap;}
+.browser-go:active{transform:scale(.97);}
+.browser-logo{text-align:center;padding:32px 0 20px;}
+
+.fade-in{animation:fi .4s ease forwards;opacity:0;}
+@keyframes fi{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+</style>
+</head>
+<body>
+<div class="stars" id="stars"></div>
+<div class="wrap">
+
+<!-- ── Header ── -->
+<div class="app-header">
+  <div class="app-header-left">
+    <div class="app-lbl">Real-time Weather</div>
+    <div class="app-name">🌐 天気まとめ</div>
+  </div>
+  <div class="app-header-moon" id="header-moon"></div>
+</div>
+
+<!-- ── 今週の予定バー ── -->
+<div class="week-bar">
+  <div class="week-bar-lbl">📌 予定</div>
+  <div class="week-win">
+    <div class="week-inner" id="weekSchedScroll"></div>
+  </div>
+</div>
+
+<!-- ── Nav ── -->
+<div class="top-nav">
+  <button class="nav-btn active" onclick="switchNav('home')">🏠 ホーム</button>
+  <button class="nav-btn" onclick="switchNav('browser')">🌐 検索</button>
+  <button class="nav-btn" onclick="switchNav('memo')">📅 予定</button>
+  <button class="nav-btn" onclick="switchNav('weather')">🔍 天気検索</button>
+</div>
+
+<!-- ═══════ HOME ═══════ -->
+<div class="panel active" id="panel-home">
+  <!-- 月齢カード（共通） -->
+  <div id="shared-moon" class="moon-card fade-in"></div>
+
+  <!-- 甲府 -->
+  <div class="loc-block">
+    <div class="loc-header">
+      <div><div class="loc-title">🗻 甲府市</div><div class="loc-sub">甲府駅周辺 / 山梨県</div></div>
+      <button class="loc-refresh" onclick="loadLoc('kofu')">🔄 更新</button>
+    </div>
+    <div id="kofu-loading" class="loc-loading"><span class="mini-spin"></span>取得中...</div>
+    <div id="kofu-body" style="display:none">
+      <div class="hero-card fade-in">
+        <div class="hero-top">
+          <div class="hero-icon" id="kofu-icon">⛅</div>
+          <div class="hero-right">
+            <div class="hero-temp" id="kofu-temp">--°</div>
+            <div class="hero-desc" id="kofu-desc">--</div>
+            <div class="hero-range" id="kofu-range">--</div>
+          </div>
+        </div>
+        <div class="hero-mini">
+          <div class="hm"><div class="hm-lbl">降水</div><div class="hm-val" id="kofu-rain">--%</div></div>
+          <div class="hm"><div class="hm-lbl">湿度</div><div class="hm-val" id="kofu-hum">--%</div></div>
+          <div class="hm"><div class="hm-lbl">風速</div><div class="hm-val" id="kofu-wind">--<span class="hm-unit">m/s</span></div></div>
+          <div class="hm"><div class="hm-lbl">体感</div><div class="hm-val" id="kofu-feels">--°</div></div>
+        </div>
+      </div>
+      <div id="kofu-moon" style="display:none"></div>
+      <div class="detail-panel" id="kofu-detail"></div>
+      <div class="hourly-wrap fade-in"><div class="sec-lbl">⏱ 時間予報</div><div class="scroll-win"><div class="scroll-inner" id="kofu-hourly"></div></div></div>
+      <div class="weekly-wrap fade-in"><div class="sec-lbl">📅 1週間予報</div><div class="scroll-win"><div class="scroll-inner" id="kofu-week"></div></div></div>
+      <div class="weekly-wrap fade-in"><div class="sec-lbl">📆 2週間予報</div><div class="scroll-win"><div class="scroll-inner" id="kofu-2week"></div></div></div>
+      <div class="alert-box" id="kofu-alert"><strong>⚠️ 注意</strong><br><span id="kofu-alertText"></span></div>
+      <div class="updated-at" id="kofu-updated"></div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- 藤沢 -->
+  <div class="loc-block">
+    <div class="loc-header">
+      <div><div class="loc-title">🌊 藤沢市</div><div class="loc-sub">湘南台駅周辺 / 神奈川県</div></div>
+      <button class="loc-refresh" onclick="loadLoc('fujisawa')">🔄 更新</button>
+    </div>
+    <div id="fujisawa-loading" class="loc-loading"><span class="mini-spin"></span>取得中...</div>
+    <div id="fujisawa-body" style="display:none">
+      <div class="hero-card fade-in">
+        <div class="hero-top">
+          <div class="hero-icon" id="fujisawa-icon">⛅</div>
+          <div class="hero-right">
+            <div class="hero-temp" id="fujisawa-temp">--°</div>
+            <div class="hero-desc" id="fujisawa-desc">--</div>
+            <div class="hero-range" id="fujisawa-range">--</div>
+          </div>
+        </div>
+        <div class="hero-mini">
+          <div class="hm"><div class="hm-lbl">降水</div><div class="hm-val" id="fujisawa-rain">--%</div></div>
+          <div class="hm"><div class="hm-lbl">湿度</div><div class="hm-val" id="fujisawa-hum">--%</div></div>
+          <div class="hm"><div class="hm-lbl">風速</div><div class="hm-val" id="fujisawa-wind">--<span class="hm-unit">m/s</span></div></div>
+          <div class="hm"><div class="hm-lbl">体感</div><div class="hm-val" id="fujisawa-feels">--°</div></div>
+        </div>
+      </div>
+      <div id="fujisawa-moon" style="display:none"></div>
+      <div class="detail-panel" id="fujisawa-detail"></div>
+      <div class="hourly-wrap fade-in"><div class="sec-lbl">⏱ 時間予報</div><div class="scroll-win"><div class="scroll-inner" id="fujisawa-hourly"></div></div></div>
+      <div class="weekly-wrap fade-in"><div class="sec-lbl">📅 1週間予報</div><div class="scroll-win"><div class="scroll-inner" id="fujisawa-week"></div></div></div>
+      <div class="weekly-wrap fade-in"><div class="sec-lbl">📆 2週間予報</div><div class="scroll-win"><div class="scroll-inner" id="fujisawa-2week"></div></div></div>
+      <div class="alert-box" id="fujisawa-alert"><strong>⚠️ 注意</strong><br><span id="fujisawa-alertText"></span></div>
+      <div class="updated-at" id="fujisawa-updated"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ WEATHER SEARCH ═══════ -->
+<div class="panel" id="panel-weather">
+  <div class="search-wrap">
+    <input type="text" class="loc-input" id="locationInput" placeholder="都市名（例：東京、大阪）" value="東京">
+    <button class="srch-btn" id="searchBtn" onclick="search()">検索</button>
+  </div>
+  <div class="srch-loading" id="s-loading"><div class="srch-loader"></div><div style="color:var(--muted);font-size:13px">取得中...</div></div>
+  <div class="srch-error" id="s-error">
+    <div style="font-size:34px;margin-bottom:10px">⚠️</div>
+    <div style="color:var(--muted);font-size:13px;white-space:pre-line" id="s-errText"></div>
+    <button class="ref-btn" onclick="search()" style="margin-top:10px">再試行</button>
+  </div>
+  <div class="srch-result" id="s-result">
+    <div id="s-body">
+      <div class="hero-card fade-in">
+        <div class="hero-top">
+          <div class="hero-icon" id="s-icon">⛅</div>
+          <div class="hero-right">
+            <div style="font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;margin-bottom:2px" id="s-locName">--</div>
+            <div class="hero-temp" id="s-temp">--°</div>
+            <div class="hero-desc" id="s-desc">--</div>
+            <div class="hero-range" id="s-range">--</div>
+          </div>
+        </div>
+        <div class="hero-mini">
+          <div class="hm"><div class="hm-lbl">降水</div><div class="hm-val" id="s-rain">--%</div></div>
+          <div class="hm"><div class="hm-lbl">湿度</div><div class="hm-val" id="s-hum">--%</div></div>
+          <div class="hm"><div class="hm-lbl">風速</div><div class="hm-val" id="s-wind">--<span class="hm-unit">m/s</span></div></div>
+          <div class="hm"><div class="hm-lbl">体感</div><div class="hm-val" id="s-feels">--°</div></div>
+        </div>
+      </div>
+      <div id="s-moon" class="moon-card fade-in"></div>
+      <div class="detail-panel" id="s-detail"></div>
+      <div class="m-grid">
+        <div class="m-card fade-in"><div class="m-lbl">☀️ UV指数</div><div class="m-val" id="s-uv">--</div><div class="bar-w"><div class="bar bar-y" id="s-uvBar"></div></div><div class="m-sub" id="s-uvDesc">--</div></div>
+        <div class="m-card fade-in"><div class="m-lbl">🌬 視程</div><div class="m-val" id="s-vis">--<span class="m-unit">km</span></div><div class="m-sub" id="s-visDesc">--</div></div>
+      </div>
+      <div class="hourly-wrap fade-in"><div class="sec-lbl">⏱ 時間予報</div><div class="scroll-win"><div class="scroll-inner" id="s-hourly"></div></div></div>
+      <div class="weekly-wrap fade-in"><div class="sec-lbl">📅 1週間予報</div><div class="scroll-win"><div class="scroll-inner" id="s-week"></div></div></div>
+      <div class="weekly-wrap fade-in"><div class="sec-lbl">📆 2週間予報</div><div class="scroll-win"><div class="scroll-inner" id="s-2week"></div></div></div>
+      <div class="alert-box" id="s-alert"><strong>⚠️ 注意</strong><br><span id="s-alertText"></span></div>
+      <div class="src-wrap fade-in">
+        <div class="sec-lbl">📡 データソース</div>
+        <div class="src-tags"><span class="src-tag">Open-Meteo</span><span class="src-tag">ECMWF</span><span class="src-tag">GFS</span><span class="src-tag">JMA</span><span class="src-tag">ERA5</span></div>
+      </div>
+      <div class="updated-at" id="s-updated"></div>
+      <button class="ref-btn" onclick="search()">🔄 更新する</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ MEMO ═══════ -->
+<div class="panel" id="panel-memo">
+  <div class="moon-detail-card fade-in">
+    <div class="moon-detail-title">🌙 月齢カレンダー</div>
+    <div class="moon-phases-row" id="moonPhasesRow"></div>
+    <div style="font-size:12px;color:var(--muted);line-height:1.6" id="moonDetailText"></div>
+  </div>
+  <div class="memo-section">
+    <div class="memo-section-title">📌 予定</div>
+    <div class="sched-form">
+      <div class="form-row"><input type="text" class="fi" id="schedTitle" placeholder="予定のタイトル"></div>
+      <div class="form-row">
+        <input type="date" class="fi fi-date" id="schedDate">
+        <input type="time" class="fi fi-time" id="schedTime">
+        <button class="add-btn" onclick="addSched()">追加</button>
+      </div>
+      <div class="form-row"><input type="text" class="fi" id="schedNote" placeholder="メモ（任意）"></div>
+    </div>
+    <div class="sched-list" id="schedList"></div>
+  </div>
+  <div class="memo-section">
+    <div class="memo-section-title">📝 メモ</div>
+    <div class="memo-form">
+      <textarea class="memo-ta" id="memoInput" placeholder="メモを入力..."></textarea>
+      <button class="memo-add-btn" onclick="addMemo()">📝 メモを保存</button>
+    </div>
+    <div id="memoList"></div>
+  </div>
+</div>
+
+<!-- ═══════ BROWSER ═══════ -->
+<div class="panel" id="panel-browser">
+  <div class="browser-wrap">
+    <div class="browser-bar">
+      <input type="text" class="browser-input" id="browserInput" placeholder="キーワードを入力して検索..." autocomplete="off">
+      <button class="browser-go" onclick="doSearch()">検索</button>
+    </div>
+    <div class="browser-logo">
+      <div style="font-size:36px;margin-bottom:8px">🔒</div>
+      <div style="font-size:14px;font-weight:700;color:var(--text)">Disconnect Search</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px;line-height:1.6">プライバシー重視の検索エンジン<br>Enterで新しいタブが開きます</div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /wrap -->
+<script>
+// Stars
+const se=document.getElementById('stars');
+for(let i=0;i<60;i++){const s=document.createElement('div');s.className='star';const sz=Math.random()*2+.5;s.style.cssText=`width:${sz}px;height:${sz}px;left:${Math.random()*100}%;top:${Math.random()*100}%;--d:${(Math.random()*4+2).toFixed(1)}s;--delay:${(Math.random()*4).toFixed(1)}s`;se.appendChild(s);}
+
+const LOCS={kofu:{lat:35.6636,lon:138.5683},fujisawa:{lat:35.3378,lon:139.4725}};
+const g=id=>document.getElementById(id);
+const st=(id,v)=>{const e=g(id);if(e)e.textContent=v;};
+const DAY_JP=['日','月','火','水','木','金','土'];
+
+// ─── 月齢 ───
+function getMoonAge(date){
+  const known=new Date('2000-01-06T18:14:00Z');
+  const diff=(date-known)/(1000*60*60*24);
+  return((diff%29.53058867)+29.53058867)%29.53058867;
+}
+function getMoonEmoji(age){
+  if(age<1.85)return'🌑';if(age<5.54)return'🌒';if(age<9.22)return'🌓';
+  if(age<12.91)return'🌔';if(age<16.61)return'🌕';if(age<20.30)return'🌖';
+  if(age<23.99)return'🌗';if(age<27.68)return'🌘';return'🌑';
+}
+function getMoonName(age){
+  if(age<1.85)return'新月';if(age<5.54)return'三日月';if(age<9.22)return'上弦の月';
+  if(age<12.91)return'十三夜月';if(age<16.61)return'満月';if(age<20.30)return'十六夜月';
+  if(age<23.99)return'下弦の月';if(age<27.68)return'有明月';return'新月';
+}
+function getNextPhaseDate(date,targetAge){
+  const cycle=29.53058867;
+  let daysUntil=targetAge-getMoonAge(date);
+  if(daysUntil<=0)daysUntil+=cycle;
+  return new Date(date.getTime()+daysUntil*24*60*60*1000);
+}
+function fmtDate(d){return`${d.getMonth()+1}/${d.getDate()}`;}
+
+function renderMoonCard(cid,date){
+  const el=g(cid);if(!el)return;
+  const age=getMoonAge(date);
+  const emoji=getMoonEmoji(age);
+  const name=getMoonName(age);
+  const pct=(age/29.53)*100;
+  const nextNew=getNextPhaseDate(date,0);
+  const nextFull=getNextPhaseDate(date,14.765);
+  el.innerHTML=`<div class="moon-emoji">${emoji}</div><div class="moon-info"><div class="moon-phase-name">${name}</div><div class="moon-age">月齢 ${age.toFixed(1)} 日</div><div class="moon-next">次の新月: ${fmtDate(nextNew)} ／ 次の満月: ${fmtDate(nextFull)}</div><div class="moon-bar-wrap"><div class="moon-bar" style="width:${pct}%"></div></div></div>`;
+}
+
+function renderMoonDetail(){
+  const now=new Date();
+  const phases=[{name:'新月',icon:'🌑',t:0},{name:'上弦',icon:'🌓',t:7.38},{name:'満月',icon:'🌕',t:14.77},{name:'下弦',icon:'🌗',t:22.15}];
+  const row=g('moonPhasesRow');if(!row)return;
+  row.innerHTML='';
+  phases.forEach(p=>{
+    const next=getNextPhaseDate(now,p.t);
+    const days=Math.round((next-now)/(1000*60*60*24));
+    const isCur=Math.abs(getMoonAge(now)-p.t)<2;
+    const div=document.createElement('div');
+    div.className='moon-phase-item'+(isCur?' mpi-active':'');
+    div.innerHTML=`<div class="mpi-icon">${p.icon}</div><div class="mpi-name">${p.name}</div><div class="mpi-date">${fmtDate(next)}<br><span style="font-size:9px">(${days}日後)</span></div>`;
+    row.appendChild(div);
+  });
+  const age=getMoonAge(now);
+  g('moonDetailText').textContent=`現在の月齢は ${age.toFixed(1)} 日（${getMoonEmoji(age)} ${getMoonName(age)}）です。月は約29.5日で新月から満月を経て次の新月へ移り変わります。`;
+}
+
+// ─── 天気 ───
+function wInfo(code){
+  const m={0:['☀️','快晴'],1:['🌤','ほぼ晴れ'],2:['⛅','晴れ時々曇り'],3:['☁️','曇り'],45:['🌫','霧'],48:['🌫','霧氷'],51:['🌦','霧雨(弱)'],53:['🌦','霧雨'],55:['🌧','霧雨(強)'],61:['🌦','小雨'],63:['🌧','雨'],65:['🌧','大雨'],71:['🌨','小雪'],73:['❄️','雪'],75:['❄️','大雪'],77:['🌨','霰'],80:['🌦','にわか雨(弱)'],81:['🌧','にわか雨'],82:['⛈','激しいにわか雨'],85:['🌨','にわか雪'],86:['❄️','激しいにわか雪'],95:['⛈','雷雨'],96:['⛈','雷雨(雹)'],99:['⛈','激しい雷雨']};
+  return m[code]||['🌡','不明'];
+}
+function wDir(d){return['北','北北東','北東','東北東','東','東南東','南東','南南東','南','南南西','南西','西南西','西','西北西','北西','北北西'][Math.round(d/22.5)%16];}
+function uvD(u){if(u<=2)return'低い';if(u<=5)return'中程度';if(u<=7)return'高い ☀️';if(u<=10)return'非常に高い ⚠️';return'極端に高い 🚨';}
+
+async function fetchW(lat,lon,days=16){
+  const u=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`
+    +`&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,precipitation_probability,visibility`
+    +`&hourly=temperature_2m,precipitation_probability,weather_code,relative_humidity_2m,apparent_temperature,wind_speed_10m,wind_direction_10m`
+    +`&daily=weather_code,temperature_2m_max,temperature_2m_min,uv_index_max,precipitation_probability_max,wind_speed_10m_max`
+    +`&timezone=Asia%2FTokyo&forecast_days=${days}`;
+  return(await fetch(u)).json();
+}
+async function geocode(city){
+  const d=await(await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=ja&format=json`)).json();
+  if(!d.results?.length)throw new Error(`「${city}」が見つかりませんでした`);
+  return d.results[0];
+}
+
+function makeDetailGrid(cells){
+  return cells.map(c=>`<div class="dc"><div class="dc-l">${c.l}</div><div class="dc-v">${c.v}<span class="dc-u">${c.u||''}</span></div></div>`).join('');
+}
+function showDetail(pfx,label,icon,tempStr,desc,sub,cells){
+  const panel=g(`${pfx}-detail`);if(!panel)return;
+  panel.innerHTML=`<button class="detail-close" onclick="closeDetail('${pfx}')">✕</button><div class="detail-lbl">${label}</div><div class="detail-top"><div class="detail-icon">${icon}</div><div><div class="detail-temp">${tempStr}</div><div class="detail-desc">${desc}</div><div class="detail-sub">${sub}</div></div></div><div class="detail-grid">${makeDetailGrid(cells)}</div>`;
+  panel.classList.add('show');
+  panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function closeDetail(pfx){
+  g(`${pfx}-detail`)?.classList.remove('show');
+  g(`${pfx}-body`)?.querySelectorAll('.selected').forEach(e=>e.classList.remove('selected'));
+}
+
+function buildHourly(hourly,cid,pfx){
+  const nowH=new Date().getHours();
+  const start=hourly.time.findIndex(t=>new Date(t).getHours()>=nowH);
+  const wrap=g(cid);wrap.innerHTML='';
+  for(let i=Math.max(0,start);i<Math.min(start+24,hourly.time.length);i++){
+    const t=new Date(hourly.time[i]);
+    const[ic,desc]=wInfo(hourly.weather_code[i]);
+    const isNow=(i===Math.max(0,start));
+    const div=document.createElement('div');
+    div.className='h-item'+(isNow?' h-now':'');
+    const timeLabel=isNow?'今':`${t.getHours().toString().padStart(2,'0')}時`;
+    const temp=Math.round(hourly.temperature_2m[i]);
+    const rain=hourly.precipitation_probability[i]??0;
+    const hum=hourly.relative_humidity_2m?.[i]??'--';
+    const feels=hourly.apparent_temperature?.[i]!=null?Math.round(hourly.apparent_temperature[i]):'--';
+    const ws=hourly.wind_speed_10m?.[i]!=null?((hourly.wind_speed_10m[i])/3.6).toFixed(1):'--';
+    const wd=hourly.wind_direction_10m?.[i]!=null?wDir(hourly.wind_direction_10m[i]):'--';
+    div.innerHTML=`<div class="h-time">${timeLabel}</div><div class="h-icon">${ic}</div><div class="h-temp">${temp}°</div><div class="h-rain">${rain}%</div>`;
+    div.addEventListener('click',()=>{
+      wrap.querySelectorAll('.selected').forEach(e=>e.classList.remove('selected'));
+      div.classList.add('selected');
+      const lbl=isNow?`今（${t.getHours()}時台）`:`${t.getMonth()+1}/${t.getDate()} ${t.getHours().toString().padStart(2,'0')}:00`;
+      showDetail(pfx,`🕐 ${lbl}`,ic,`${temp}°`,desc,`降水確率 ${rain}%`,[
+        {l:'気温',v:temp,u:'°'},{l:'体感温度',v:feels,u:'°'},{l:'降水確率',v:rain,u:'%'},
+        {l:'湿度',v:hum,u:'%'},{l:'風速',v:ws,u:'m/s'},{l:'風向き',v:wd,u:''},
+      ]);
+    });
+    wrap.appendChild(div);
+  }
+}
+
+function buildWeekly(daily,cid,start,end,pfx){
+  const wrap=g(cid);wrap.innerHTML='';
+  for(let i=start;i<Math.min(end,daily.time.length);i++){
+    const d=new Date(daily.time[i]+'T12:00:00');
+    const dow=d.getDay();
+    const[ic,desc]=wInfo(daily.weather_code[i]);
+    const rain=daily.precipitation_probability_max[i]??0;
+    const hi=Math.round(daily.temperature_2m_max[i]);
+    const lo=Math.round(daily.temperature_2m_min[i]);
+    const uv=daily.uv_index_max[i];
+    const maxWind=daily.wind_speed_10m_max?.[i]!=null?((daily.wind_speed_10m_max[i])/3.6).toFixed(1):'--';
+    const isToday=(i===0);
+    const moonEmoji=getMoonEmoji(getMoonAge(d));
+    const card=document.createElement('div');
+    card.className='day-item'+(isToday?' today':'');
+    const dowCls=dow===0?'sun':dow===6?'sat':'';
+    card.innerHTML=`<div class="day-name ${dowCls}">${isToday?'今日':DAY_JP[dow]}</div><div style="font-size:9px;color:var(--muted);margin-bottom:2px;font-family:'Space Mono',monospace">${isToday?'':(`${d.getMonth()+1}/${d.getDate()}`)}</div><div class="day-ico">${ic}</div><div class="day-moon">${moonEmoji}</div><div class="day-rain">${rain}%</div><div class="day-hi">${hi}°</div><div class="day-lo">${lo}°</div>`;
+    card.addEventListener('click',()=>{
+      g(`${pfx}-body`)?.querySelectorAll('.day-item.selected').forEach(e=>e.classList.remove('selected'));
+      card.classList.add('selected');
+      const fullDate=isToday?'今日':`${d.getMonth()+1}月${d.getDate()}日（${DAY_JP[dow]}）`;
+      showDetail(pfx,`📅 ${fullDate}`,ic,`${hi}° / ${lo}°`,desc,`降水確率 ${rain}%`,[
+        {l:'最高気温',v:hi,u:'°'},{l:'最低気温',v:lo,u:'°'},{l:'降水確率',v:rain,u:'%'},
+        {l:'UV指数',v:uv??'--',u:''},{l:'最大風速',v:maxWind,u:'m/s'},{l:'月',v:moonEmoji+' '+getMoonName(getMoonAge(d)),u:''},
+      ]);
+    });
+    wrap.appendChild(card);
+  }
+}
+
+function doAlerts(pfx,ws,rain,uv,hum){
+  const a=[];
+  if(parseFloat(ws)>=10)a.push('強風注意（10m/s以上）');
+  if(rain>=70)a.push('降水確率が高め、傘を ☂️');
+  if(uv>=8)a.push('UV指数が非常に高い、日焼け対策を');
+  if(hum>=80)a.push('湿度が高い、熱中症に注意');
+  const box=g(`${pfx}-alert`);
+  if(a.length){st(`${pfx}-alertText`,a.join(' / '));box?.classList.add('show');}
+  else box?.classList.remove('show');
+}
+
+function renderLoc(key,w){
+  const c=w.current,daily=w.daily,hourly=w.hourly;
+  const[icon,desc]=wInfo(c.weather_code);
+  g(`${key}-icon`).textContent=icon;
+  st(`${key}-desc`,desc);
+  st(`${key}-temp`,Math.round(c.temperature_2m)+'°');
+  st(`${key}-range`,`最高 ${Math.round(daily.temperature_2m_max[0])}° / 最低 ${Math.round(daily.temperature_2m_min[0])}°`);
+  const rain=c.precipitation_probability??daily.precipitation_probability_max[0]??0;
+  st(`${key}-rain`,rain+'%');
+  st(`${key}-hum`,c.relative_humidity_2m+'%');
+  const ws=(c.wind_speed_10m/3.6).toFixed(1);
+  st(`${key}-wind`,ws);
+  st(`${key}-feels`,Math.round(c.apparent_temperature)+'°');
+  buildHourly(hourly,`${key}-hourly`,key);
+  buildWeekly(daily,`${key}-week`,0,7,key);
+  buildWeekly(daily,`${key}-2week`,7,16,key);
+  doAlerts(key,ws,rain,daily.uv_index_max[0],c.relative_humidity_2m);
+  const now=new Date();
+  st(`${key}-updated`,`更新: ${now.toLocaleDateString('ja-JP')} ${now.toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}`);
+}
+
+async function loadLoc(key){
+  g(`${key}-loading`).style.display='block';
+  g(`${key}-body`).style.display='none';
+  try{
+    const w=await fetchW(LOCS[key].lat,LOCS[key].lon,16);
+    renderLoc(key,w);
+    g(`${key}-loading`).style.display='none';
+    g(`${key}-body`).style.display='block';
+  }catch(e){
+    g(`${key}-loading`).innerHTML=`<span style="color:var(--accent3)">⚠️ 取得失敗: ${e.message}</span>`;
+  }
+}
+
+async function search(){
+  const city=g('locationInput').value.trim();if(!city)return;
+  g('s-result').classList.remove('show');
+  g('s-error').classList.remove('show');
+  g('s-loading').classList.add('show');
+  g('searchBtn').disabled=true;
+  try{
+    const place=await geocode(city);
+    const w=await fetchW(place.latitude,place.longitude,16);
+    const c=w.current,daily=w.daily,hourly=w.hourly;
+    const[icon,desc]=wInfo(c.weather_code);
+    st('s-locName',`📍 ${place.name}（${place.country}）`);
+    g('s-icon').textContent=icon;
+    st('s-desc',desc);
+    st('s-temp',Math.round(c.temperature_2m)+'°');
+    st('s-range',`最高 ${Math.round(daily.temperature_2m_max[0])}° / 最低 ${Math.round(daily.temperature_2m_min[0])}°`);
+    const rain=c.precipitation_probability??daily.precipitation_probability_max[0]??0;
+    st('s-rain',rain+'%');
+    st('s-hum',c.relative_humidity_2m+'%');
+    const ws=(c.wind_speed_10m/3.6).toFixed(1);
+    st('s-wind',ws);
+    st('s-feels',Math.round(c.apparent_temperature)+'°');
+    const uv=daily.uv_index_max[0];
+    st('s-uv',uv);st('s-uvDesc',uvD(uv));
+    setTimeout(()=>{g('s-uvBar').style.width=Math.min(uv/11*100,100)+'%';},200);
+    const visKm=c.visibility?(c.visibility/1000).toFixed(1):'--';
+    st('s-vis',visKm);st('s-visDesc',c.visibility>=10000?'良好':c.visibility>=5000?'やや霞':'霧・霞注意');
+    renderMoonCard('s-moon',new Date());
+    buildHourly(hourly,'s-hourly','s');
+    buildWeekly(daily,'s-week',0,7,'s');
+    buildWeekly(daily,'s-2week',7,16,'s');
+    doAlerts('s',ws,rain,uv,c.relative_humidity_2m);
+    const now=new Date();
+    st('s-updated',`更新: ${now.toLocaleDateString('ja-JP')} ${now.toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}`);
+    g('s-loading').classList.remove('show');
+    g('s-result').classList.add('show');
+  }catch(e){
+    g('s-loading').classList.remove('show');
+    g('s-error').classList.add('show');
+    st('s-errText',e.message+'\n\n例：東京、大阪、Osaka、Tokyo');
+  }finally{g('searchBtn').disabled=false;}
+}
+
+// ─── 予定・メモ (localStorage) ───
+const LS_S='tenmemo_sched';
+const LS_M='tenmemo_memo';
+const loadScheds=()=>JSON.parse(localStorage.getItem(LS_S)||'[]');
+const saveScheds=a=>localStorage.setItem(LS_S,JSON.stringify(a));
+const loadMemos=()=>JSON.parse(localStorage.getItem(LS_M)||'[]');
+const saveMemos=a=>localStorage.setItem(LS_M,JSON.stringify(a));
+
+function renderWeekBar(){
+  const wrap=g('weekSchedScroll');if(!wrap)return;
+  wrap.innerHTML='';
+  const scheds=loadScheds();
+  const today=new Date();
+  const todayStr=today.toISOString().slice(0,10);
+  const past=new Date(today);past.setDate(past.getDate()-7);
+  const future=new Date(today);future.setDate(future.getDate()+60);
+  const filtered=scheds.filter(s=>s.date>=past.toISOString().slice(0,10)&&s.date<=future.toISOString().slice(0,10));
+  if(!filtered.length){
+    wrap.innerHTML='<div class="week-empty">予定なし — 予定タブから追加できます 📌</div>';
+    return;
+  }
+  filtered.forEach(s=>{
+    const d=new Date(s.date+'T12:00:00');
+    const dow=DAY_JP[d.getDay()];
+    const isPast=s.date<todayStr;
+    const isToday=s.date===todayStr;
+    const card=document.createElement('div');
+    card.className='wsc'+(isToday?' wsc-today':isPast?' wsc-past':'');
+    const dateLabel=isToday?`今日(${dow})`:`${d.getMonth()+1}/${d.getDate()}(${dow})`;
+    card.innerHTML=`<div class="wsc-date">${dateLabel}</div><div class="wsc-title">${s.title}</div>${s.time?`<div class="wsc-time">🕐 ${s.time}</div>`:''}`;
+    card.addEventListener('click',()=>switchNav('memo'));
+    wrap.appendChild(card);
+  });
+  const todayCard=wrap.querySelector('.wsc-today');
+  if(todayCard)setTimeout(()=>todayCard.scrollIntoView({behavior:'smooth',inline:'start',block:'nearest'}),150);
+}
+
+function addSched(){
+  const title=g('schedTitle').value.trim();
+  const date=g('schedDate').value;
+  const time=g('schedTime').value;
+  const note=g('schedNote').value.trim();
+  if(!title||!date){alert('タイトルと日付を入力してください');return;}
+  const scheds=loadScheds();
+  scheds.push({id:Date.now(),title,date,time,note});
+  scheds.sort((a,b)=>a.date.localeCompare(b.date)||(a.time||'').localeCompare(b.time||''));
+  saveScheds(scheds);
+  g('schedTitle').value='';g('schedTime').value='';g('schedNote').value='';
+  renderScheds();renderWeekBar();
+}
+
+function deleteSched(id){
+  saveScheds(loadScheds().filter(s=>s.id!==id));
+  renderScheds();renderWeekBar();
+}
+
+function renderScheds(){
+  const list=g('schedList');
+  const scheds=loadScheds();
+  if(!scheds.length){list.innerHTML='<div class="empty-msg">📌 予定はありません</div>';return;}
+  const todayStr=new Date().toISOString().slice(0,10);
+  list.innerHTML='';
+  scheds.forEach(s=>{
+    const isPast=s.date<todayStr;
+    const div=document.createElement('div');
+    div.className='sched-item'+(isPast?' past':'');
+    div.innerHTML=`<div class="sched-dot"></div><div class="sched-content"><div class="sched-title">${s.title}</div><div class="sched-datetime">📅 ${s.date}${s.time?' '+s.time:''}</div>${s.note?`<div class="sched-note">${s.note}</div>`:''}</div><button class="sched-del" onclick="deleteSched(${s.id})">削除</button>`;
+    list.appendChild(div);
+  });
+}
+
+function addMemo(){
+  const text=g('memoInput').value.trim();if(!text)return;
+  const memos=loadMemos();
+  memos.unshift({id:Date.now(),text,created:new Date().toLocaleString('ja-JP')});
+  saveMemos(memos);
+  g('memoInput').value='';
+  renderMemos();
+}
+
+function deleteMemo(id){
+  saveMemos(loadMemos().filter(m=>m.id!==id));
+  renderMemos();
+}
+
+function renderMemos(){
+  const list=g('memoList');
+  const memos=loadMemos();
+  if(!memos.length){list.innerHTML='<div class="empty-msg">📝 メモはありません</div>';return;}
+  list.innerHTML='';
+  memos.forEach(m=>{
+    const div=document.createElement('div');
+    div.className='memo-item';
+    div.innerHTML=`<div class="sched-dot memo"></div><div class="memo-body"><div class="memo-text">${m.text}</div><div class="memo-time">${m.created}</div></div><button class="sched-del" onclick="deleteMemo(${m.id})">削除</button>`;
+    list.appendChild(div);
+  });
+}
+
+// ─── Nav ───
+function switchNav(name){
+  const names=['home','weather','memo','browser'];
+  document.querySelectorAll('.nav-btn').forEach((b,i)=>b.classList.toggle('active',names[i]===name));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  g('panel-'+name).classList.add('active');
+  if(name==='browser')g('browserInput').focus();
+}
+
+function doSearch(){
+  const q=g('browserInput').value.trim();if(!q)return;
+  window.open('https://search.disconnect.me/searchTerms/search?query='+encodeURIComponent(q)+'&ses=Google','_blank');
+}
+
+g('locationInput').addEventListener('keydown',e=>{if(e.key==='Enter')search();});
+g('browserInput').addEventListener('keydown',e=>{if(e.key==='Enter')doSearch();});
+g('schedDate').value=new Date().toISOString().slice(0,10);
+
+window.addEventListener('load',()=>{
+  loadLoc('kofu');
+  loadLoc('fujisawa');
+  renderMoonDetail();
+  renderScheds();
+  renderMemos();
+  renderWeekBar();
+  // 共通月齢カード（ホーム上部に1つ）
+  renderMoonCard('shared-moon',new Date());
+  // ヘッダー月齢
+  const age=getMoonAge(new Date());
+  const hm=g('header-moon');
+  if(hm)hm.innerHTML=`${getMoonEmoji(age)}<br>${getMoonName(age)}<br><span style="font-size:9px;opacity:.7">月齢${age.toFixed(0)}</span>`;
+});
+</script>
+</body>
+</html>
