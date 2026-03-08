@@ -473,7 +473,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
         <span class="radar-legend-lbl">強</span>
       </div>
     </div>
-    <div class="radar-hint">📍 地図はドラッグ・ピンチで操作できます　▶ で過去1時間のアニメーション再生</div>
+    <div class="radar-hint">📡 過去1時間（観測）＋ 🔮 1時間先（予報）計18コマ　▶ でアニメーション再生</div>
   </div>
 </div>
 
@@ -848,16 +848,65 @@ function switchNav(name){
   if(name==='radar')initRadar();
 }
 
-// ─── 雨雲レーダー ───
-// ─── 雨雲レーダー (RainViewer API + Leaflet) ───
+// ─── 雨雲レーダー (気象庁ナウキャスト＋短時間予報 + Leaflet) ───
 const RADAR_AREAS={
-  jp:   {lat:36.5,lon:137.0,zoom:5},
-  kanto:{lat:35.7,lon:139.7,zoom:7},
-  kansai:{lat:34.7,lon:135.5,zoom:7},
-  chubu:{lat:35.2,lon:137.1,zoom:7},
-  tohoku:{lat:39.5,lon:141.0,zoom:6},
-  kyushu:{lat:33.0,lon:130.5,zoom:6}
+  jp:    {lat:36.5, lon:137.0, zoom:5},
+  kanto: {lat:35.7, lon:139.7, zoom:9},
+  kansai:{lat:34.7, lon:135.5, zoom:9},
+  chubu: {lat:35.2, lon:137.1, zoom:9},
+  tohoku:{lat:39.5, lon:141.0, zoom:8},
+  kyushu:{lat:33.0, lon:130.5, zoom:8}
 };
+
+// タイムスタンプ文字列生成
+function toJmaTs(d){
+  return d.getFullYear().toString()
+    +(d.getMonth()+1).toString().padStart(2,'0')
+    +d.getDate().toString().padStart(2,'0')
+    +d.getHours().toString().padStart(2,'0')
+    +d.getMinutes().toString().padStart(2,'0')+'00';
+}
+
+// 観測フレーム（ナウキャスト・過去1時間・5分間隔×12コマ）
+function getObsFrames(){
+  const frames=[];
+  const base=new Date();
+  base.setMinutes(base.getMinutes()-15);
+  base.setMinutes(Math.floor(base.getMinutes()/5)*5,0,0);
+  for(let i=11;i>=0;i--){
+    const d=new Date(base.getTime()-i*5*60*1000);
+    const ts=toJmaTs(d);
+    frames.push({ts,date:new Date(d),type:'obs'});
+  }
+  return frames;
+}
+
+// 予報フレーム（降水短時間予報・1時間先・10分間隔×6コマ）
+function getFcstFrames(){
+  const frames=[];
+  const base=new Date();
+  // 基準時刻：直近の10分刻み
+  base.setMinutes(Math.floor(base.getMinutes()/10)*10,0,0);
+  const baseTs=toJmaTs(base);
+  for(let i=1;i<=6;i++){
+    const d=new Date(base.getTime()+i*10*60*1000);
+    const fcTs=toJmaTs(d);
+    frames.push({ts:fcTs, baseTs, date:new Date(d), type:'fcst'});
+  }
+  return frames;
+}
+
+// タイルURL振り分け
+function jmaTileUrl(frame){
+  if(frame.type==='obs'){
+    // ナウキャスト（観測）
+    return `https://www.jma.go.jp/bosai/jmatile/data/nowc/${frame.ts}/none/${frame.ts}/surf/hrpns/{z}/{x}/{y}.png`;
+  } else {
+    // 降水短時間予報
+    return `https://www.jma.go.jp/bosai/jmatile/data/rasrf/${frame.baseTs}/fcst/${frame.ts}/surf/rasrf/{z}/{x}/{y}.png`;
+  }
+}
+
 let radarMap=null, radarLayer=null, radarFrames=[], radarIdx=0;
 let radarPlaying=false, radarTimer=null, radarInited=false;
 let radarArea='jp';
@@ -866,53 +915,57 @@ function initRadar(){
   if(radarInited)return;
   radarInited=true;
   const area=RADAR_AREAS[radarArea];
-  radarMap=L.map('radarMap',{zoomControl:true,attributionControl:false,minZoom:3,maxZoom:7}).setView([area.lat,area.lon],area.zoom);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{minZoom:3,maxZoom:7}).addTo(radarMap);
-  L.control.attribution({position:'bottomleft'}).addTo(radarMap);
-  fetchRadarFrames();
+  radarMap=L.map('radarMap',{
+    zoomControl:true,
+    attributionControl:false,
+    minZoom:3,
+    maxZoom:10
+  }).setView([area.lat,area.lon],area.zoom);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+    minZoom:3,maxZoom:10,attribution:'© CartoDB'
+  }).addTo(radarMap);
+  L.control.attribution({position:'bottomleft',prefix:'気象庁'}).addTo(radarMap);
+  loadJmaRadar();
 }
 
-async function fetchRadarFrames(){
+function loadJmaRadar(){
   const overlay=g('radarLoadingOverlay');
   if(overlay)overlay.classList.remove('hidden');
-  try{
-    const res=await fetch('https://api.rainviewer.com/public/weather-maps.json');
-    const data=await res.json();
-    radarFrames=[...data.radar.past,...(data.radar.nowcast||[])];
-    const slider=g('radarSlider');
-    slider.max=radarFrames.length-1;
-    slider.value=radarFrames.length-1;
-    radarIdx=radarFrames.length-1;
-    showRadarFrame(radarIdx);
-  }catch(e){
-    g('radarTimeLabel').textContent='データ取得失敗 — ネットワークを確認してください';
-  }finally{
-    if(overlay)overlay.classList.add('hidden');
-  }
+  // 観測12コマ＋予報6コマ = 計18コマ
+  radarFrames=[...getObsFrames(),...getFcstFrames()];
+  const slider=g('radarSlider');
+  slider.max=radarFrames.length-1;
+  // 現在時刻（観測最新＝インデックス11）を初期表示
+  radarIdx=11;
+  slider.value=radarIdx;
+  showJmaFrame(radarIdx);
+  if(overlay)setTimeout(()=>overlay.classList.add('hidden'),800);
 }
 
-function showRadarFrame(idx){
+function showJmaFrame(idx){
   if(!radarFrames.length)return;
   idx=Math.max(0,Math.min(idx,radarFrames.length-1));
   radarIdx=idx;
   const frame=radarFrames[idx];
-  const ts=frame.time;
-  const d=new Date(ts*1000);
-  const label=d.toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
-  const isNowcast=frame.path&&frame.path.includes('nowcast');
-  g('radarTimeLabel').textContent=(isNowcast?'🔮 予測 ':'📡 観測 ')+label;
+  const label=frame.date.toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+  const icon=frame.type==='fcst'?'🔮 予報 ':'📡 観測 ';
+  g('radarTimeLabel').textContent=icon+label;
   g('radarSlider').value=idx;
   if(radarLayer)radarMap.removeLayer(radarLayer);
-  radarLayer=L.tileLayer(
-    `https://tilecache.rainviewer.com${frame.path}/256/{z}/{x}/{y}/2/1_1.png`,
-    {opacity:0.7,minZoom:3,maxZoom:7,tileSize:256,zIndex:10}
-  );
+  radarLayer=L.tileLayer(jmaTileUrl(frame),{
+    opacity:0.75,
+    minZoom:3,
+    maxZoom:10,
+    tileSize:256,
+    zIndex:10,
+    errorTileUrl:'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
+  });
   radarLayer.addTo(radarMap);
 }
 
 function onSliderChange(val){
   if(radarPlaying)stopRadarPlay();
-  showRadarFrame(parseInt(val));
+  showJmaFrame(parseInt(val));
 }
 
 function toggleRadarPlay(){
@@ -924,8 +977,8 @@ function startRadarPlay(){
   g('radarPlayBtn').textContent='⏸';
   radarTimer=setInterval(()=>{
     radarIdx=(radarIdx+1)%radarFrames.length;
-    showRadarFrame(radarIdx);
-  },600);
+    showJmaFrame(radarIdx);
+  },700);
 }
 
 function stopRadarPlay(){
