@@ -921,7 +921,7 @@ function initRadar(){
     minZoom:3,
     maxZoom:10
   }).setView([area.lat,area.lon],area.zoom);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
     minZoom:3,maxZoom:10,attribution:'© CartoDB'
   }).addTo(radarMap);
   L.control.attribution({position:'bottomleft',prefix:'気象庁'}).addTo(radarMap);
