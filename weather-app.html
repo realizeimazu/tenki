@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>天気まとめ</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
@@ -233,22 +235,24 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 
 /* ── 雨雲レーダー ── */
 .radar-wrap{display:flex;flex-direction:column;gap:10px;}
-.radar-header{display:flex;align-items:center;justify-content:space-between;}
-.radar-title{font-size:15px;font-weight:700;}
-.radar-area-row{display:flex;gap:5px;flex-wrap:wrap;}
-.radar-area-btn{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:5px 11px;color:var(--muted);font-size:11px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;transition:all .2s;white-space:nowrap;}
+.radar-title{font-size:15px;font-weight:700;margin-bottom:2px;}
+.radar-area-row{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:2px;}
+.radar-area-btn{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:5px 12px;color:var(--muted);font-size:11px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;transition:all .2s;white-space:nowrap;}
 .radar-area-btn.active{background:rgba(0,212,255,.15);border-color:rgba(0,212,255,.4);color:var(--accent);}
-.radar-source-tabs{display:flex;gap:5px;}
-.rsrc-btn{flex:1;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:7px 4px;color:var(--muted);font-size:11px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;transition:all .2s;white-space:nowrap;}
-.rsrc-btn.active{background:rgba(0,212,255,.12);border-color:rgba(0,212,255,.35);color:var(--accent);}
-.radar-frame-wrap{position:relative;width:100%;height:460px;border-radius:14px;overflow:hidden;background:var(--card);border:1px solid rgba(0,212,255,.15);}
-.radar-frame{width:100%;height:100%;border:none;display:block;}
-.radar-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:6px;font-size:13px;color:var(--muted);background:var(--card);z-index:5;border-radius:14px;transition:opacity .3s;}
-.radar-loading.hidden{opacity:0;pointer-events:none;}
-.radar-hint{font-size:10px;color:var(--muted);text-align:center;line-height:1.5;opacity:.7;}
-.radar-open-row{text-align:center;}
-.radar-open-btn{background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.25);border-radius:11px;padding:10px 20px;color:var(--accent);font-size:13px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;transition:background .2s;}
-.radar-open-btn:hover{background:rgba(0,212,255,.15);}
+.radar-map-wrap{position:relative;width:100%;height:420px;border-radius:14px;overflow:hidden;border:1px solid rgba(0,212,255,.2);}
+#radarMap{width:100%;height:100%;}
+.radar-time-bar{background:var(--card);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:10px 12px;}
+.radar-time-label{font-size:11px;color:var(--accent);font-family:'Space Mono',monospace;text-align:center;margin-bottom:8px;min-height:16px;}
+.radar-controls-row{display:flex;align-items:center;gap:8px;}
+.radar-play-btn{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:50%;width:36px;height:36px;color:#000;font-size:14px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+.radar-slider{flex:1;-webkit-appearance:none;appearance:none;height:4px;border-radius:2px;background:rgba(255,255,255,.1);outline:none;cursor:pointer;}
+.radar-slider::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent);cursor:pointer;box-shadow:0 0 6px rgba(0,212,255,.5);}
+.radar-legend{display:flex;align-items:center;gap:6px;margin-top:8px;}
+.radar-legend-bar{flex:1;height:8px;border-radius:4px;background:linear-gradient(90deg,#00ffff,#00ff00,#ffff00,#ff8800,#ff0000,#cc00cc);opacity:.85;}
+.radar-legend-lbl{font-size:9px;color:var(--muted);font-family:'Space Mono',monospace;white-space:nowrap;}
+.radar-hint{font-size:10px;color:var(--muted);text-align:center;line-height:1.6;opacity:.7;}
+.radar-loading-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;color:var(--muted);background:rgba(5,13,26,.85);z-index:500;border-radius:14px;transition:opacity .4s;}
+.radar-loading-overlay.hidden{opacity:0;pointer-events:none;}
 
 .fade-in{animation:fi .4s ease forwards;opacity:0;}
 @keyframes fi{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
@@ -444,30 +448,32 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 <!-- ═══════ RADAR ═══════ -->
 <div class="panel" id="panel-radar">
   <div class="radar-wrap">
-    <div class="radar-header">
-      <div class="radar-title">🌧 雨雲レーダー</div>
-      <div class="radar-controls">
-        <div class="radar-area-row">
-          <button class="radar-area-btn active" onclick="setRadarArea('jp',this)">🗾 全国</button>
-          <button class="radar-area-btn" onclick="setRadarArea('kanto',this)">関東</button>
-          <button class="radar-area-btn" onclick="setRadarArea('kansai',this)">関西</button>
-          <button class="radar-area-btn" onclick="setRadarArea('chubu',this)">中部</button>
-        </div>
+    <div class="radar-title">🌧 雨雲レーダー</div>
+    <div class="radar-area-row">
+      <button class="radar-area-btn active" onclick="setRadarArea('jp',this)">🗾 全国</button>
+      <button class="radar-area-btn" onclick="setRadarArea('kanto',this)">関東</button>
+      <button class="radar-area-btn" onclick="setRadarArea('kansai',this)">関西</button>
+      <button class="radar-area-btn" onclick="setRadarArea('chubu',this)">中部</button>
+      <button class="radar-area-btn" onclick="setRadarArea('tohoku',this)">東北</button>
+      <button class="radar-area-btn" onclick="setRadarArea('kyushu',this)">九州</button>
+    </div>
+    <div class="radar-map-wrap">
+      <div class="radar-loading-overlay" id="radarLoadingOverlay"><div class="mini-spin"></div> レーダー取得中...</div>
+      <div id="radarMap"></div>
+    </div>
+    <div class="radar-time-bar">
+      <div class="radar-time-label" id="radarTimeLabel">-- 時刻選択 --</div>
+      <div class="radar-controls-row">
+        <button class="radar-play-btn" id="radarPlayBtn" onclick="toggleRadarPlay()">▶</button>
+        <input type="range" class="radar-slider" id="radarSlider" min="0" value="0" oninput="onSliderChange(this.value)">
+      </div>
+      <div class="radar-legend">
+        <span class="radar-legend-lbl">弱</span>
+        <div class="radar-legend-bar"></div>
+        <span class="radar-legend-lbl">強</span>
       </div>
     </div>
-    <div class="radar-source-tabs">
-      <button class="rsrc-btn active" onclick="setRadarSource('tenki',this)">tenki.jp</button>
-      <button class="rsrc-btn" onclick="setRadarSource('jma',this)">気象庁</button>
-      <button class="rsrc-btn" onclick="setRadarSource('weathernews',this)">ウェザーニュース</button>
-    </div>
-    <div class="radar-frame-wrap" id="radarFrameWrap">
-      <div class="radar-loading" id="radarLoading"><div class="mini-spin"></div> 読み込み中...</div>
-      <iframe id="radarFrame" class="radar-frame" src="" frameborder="0" scrolling="yes" allowfullscreen></iframe>
-    </div>
-    <div class="radar-hint">※ タップして地図を操作できます。ページ内でスクロールするには2本指を使用してください。</div>
-    <div class="radar-open-row">
-      <button class="radar-open-btn" onclick="openRadarExternal()">🔗 外部サイトで開く</button>
-    </div>
+    <div class="radar-hint">📍 地図はドラッグ・ピンチで操作できます　▶ で過去1時間のアニメーション再生</div>
   </div>
 </div>
 
@@ -843,63 +849,98 @@ function switchNav(name){
 }
 
 // ─── 雨雲レーダー ───
-const RADAR_URLS={
-  tenki:{
-    jp:'https://tenki.jp/radar/',
-    kanto:'https://tenki.jp/radar/3/',
-    kansai:'https://tenki.jp/radar/6/',
-    chubu:'https://tenki.jp/radar/5/'
-  },
-  jma:{
-    jp:'https://www.jma.go.jp/bosai/nowc/#zoom:5/lat:36/lon:137/colordepth:normal/elements:hrpns',
-    kanto:'https://www.jma.go.jp/bosai/nowc/#zoom:7/lat:35.7/lon:139.7/colordepth:normal/elements:hrpns',
-    kansai:'https://www.jma.go.jp/bosai/nowc/#zoom:7/lat:34.7/lon:135.5/colordepth:normal/elements:hrpns',
-    chubu:'https://www.jma.go.jp/bosai/nowc/#zoom:7/lat:35.2/lon:137.0/colordepth:normal/elements:hrpns'
-  },
-  weathernews:{
-    jp:'https://weathernews.jp/onebox/tenki/radar/',
-    kanto:'https://weathernews.jp/onebox/tenki/radar/13/',
-    kansai:'https://weathernews.jp/onebox/tenki/radar/27/',
-    chubu:'https://weathernews.jp/onebox/tenki/radar/23/'
-  }
+// ─── 雨雲レーダー (RainViewer API + Leaflet) ───
+const RADAR_AREAS={
+  jp:   {lat:36.5,lon:137.0,zoom:5},
+  kanto:{lat:35.7,lon:139.7,zoom:8},
+  kansai:{lat:34.7,lon:135.5,zoom:8},
+  chubu:{lat:35.2,lon:137.1,zoom:8},
+  tohoku:{lat:39.5,lon:141.0,zoom:7},
+  kyushu:{lat:33.0,lon:130.5,zoom:7}
 };
-let radarSource='tenki';
+let radarMap=null, radarLayer=null, radarFrames=[], radarIdx=0;
+let radarPlaying=false, radarTimer=null, radarInited=false;
 let radarArea='jp';
-let radarInited=false;
 
 function initRadar(){
   if(radarInited)return;
   radarInited=true;
-  updateRadarFrame();
+  const area=RADAR_AREAS[radarArea];
+  radarMap=L.map('radarMap',{zoomControl:true,attributionControl:false}).setView([area.lat,area.lon],area.zoom);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:18}).addTo(radarMap);
+  L.control.attribution({position:'bottomleft'}).addTo(radarMap);
+  fetchRadarFrames();
 }
 
-function setRadarSource(src,btn){
-  radarSource=src;
-  document.querySelectorAll('.rsrc-btn').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  updateRadarFrame();
+async function fetchRadarFrames(){
+  const overlay=g('radarLoadingOverlay');
+  if(overlay)overlay.classList.remove('hidden');
+  try{
+    const res=await fetch('https://api.rainviewer.com/public/weather-maps.json');
+    const data=await res.json();
+    radarFrames=[...data.radar.past,...(data.radar.nowcast||[])];
+    const slider=g('radarSlider');
+    slider.max=radarFrames.length-1;
+    slider.value=radarFrames.length-1;
+    radarIdx=radarFrames.length-1;
+    showRadarFrame(radarIdx);
+  }catch(e){
+    g('radarTimeLabel').textContent='データ取得失敗 — ネットワークを確認してください';
+  }finally{
+    if(overlay)overlay.classList.add('hidden');
+  }
+}
+
+function showRadarFrame(idx){
+  if(!radarFrames.length)return;
+  idx=Math.max(0,Math.min(idx,radarFrames.length-1));
+  radarIdx=idx;
+  const frame=radarFrames[idx];
+  const ts=frame.time;
+  const d=new Date(ts*1000);
+  const label=d.toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+  const isNowcast=frame.path&&frame.path.includes('nowcast');
+  g('radarTimeLabel').textContent=(isNowcast?'🔮 予測 ':'📡 観測 ')+label;
+  g('radarSlider').value=idx;
+  if(radarLayer)radarMap.removeLayer(radarLayer);
+  radarLayer=L.tileLayer(
+    `https://tilecache.rainviewer.com${frame.path}/256/{z}/{x}/{y}/2/1_1.png`,
+    {opacity:0.7,maxZoom:18,tileSize:256,zIndex:10}
+  );
+  radarLayer.addTo(radarMap);
+}
+
+function onSliderChange(val){
+  if(radarPlaying)stopRadarPlay();
+  showRadarFrame(parseInt(val));
+}
+
+function toggleRadarPlay(){
+  radarPlaying?stopRadarPlay():startRadarPlay();
+}
+
+function startRadarPlay(){
+  radarPlaying=true;
+  g('radarPlayBtn').textContent='⏸';
+  radarTimer=setInterval(()=>{
+    radarIdx=(radarIdx+1)%radarFrames.length;
+    showRadarFrame(radarIdx);
+  },600);
+}
+
+function stopRadarPlay(){
+  radarPlaying=false;
+  g('radarPlayBtn').textContent='▶';
+  clearInterval(radarTimer);
 }
 
 function setRadarArea(area,btn){
   radarArea=area;
   document.querySelectorAll('.radar-area-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
-  updateRadarFrame();
-}
-
-function updateRadarFrame(){
-  const frame=g('radarFrame');
-  const loading=g('radarLoading');
-  const url=RADAR_URLS[radarSource][radarArea];
-  loading.classList.remove('hidden');
-  frame.src='';
-  setTimeout(()=>{frame.src=url;},100);
-  frame.onload=()=>loading.classList.add('hidden');
-}
-
-function openRadarExternal(){
-  const url=RADAR_URLS[radarSource][radarArea];
-  window.open(url,'_blank');
+  if(!radarMap)return;
+  const a=RADAR_AREAS[area];
+  radarMap.setView([a.lat,a.lon],a.zoom);
 }
 
 function doSearch(){
