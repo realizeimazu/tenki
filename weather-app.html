@@ -699,9 +699,8 @@ function renderWeekBar(){
   const scheds=loadScheds();
   const today=new Date();
   const todayStr=today.toISOString().slice(0,10);
-  const past=new Date(today);past.setDate(past.getDate()-7);
   const future=new Date(today);future.setDate(future.getDate()+60);
-  const filtered=scheds.filter(s=>s.date>=past.toISOString().slice(0,10)&&s.date<=future.toISOString().slice(0,10));
+  const filtered=scheds.filter(s=>s.date>=todayStr&&s.date<=future.toISOString().slice(0,10));
   if(!filtered.length){
     wrap.innerHTML='<div class="week-empty">予定なし — 予定タブから追加できます 📌</div>';
     return;
