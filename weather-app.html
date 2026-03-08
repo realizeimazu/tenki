@@ -852,11 +852,11 @@ function switchNav(name){
 // ─── 雨雲レーダー (RainViewer API + Leaflet) ───
 const RADAR_AREAS={
   jp:   {lat:36.5,lon:137.0,zoom:5},
-  kanto:{lat:35.7,lon:139.7,zoom:8},
-  kansai:{lat:34.7,lon:135.5,zoom:8},
-  chubu:{lat:35.2,lon:137.1,zoom:8},
-  tohoku:{lat:39.5,lon:141.0,zoom:7},
-  kyushu:{lat:33.0,lon:130.5,zoom:7}
+  kanto:{lat:35.7,lon:139.7,zoom:7},
+  kansai:{lat:34.7,lon:135.5,zoom:7},
+  chubu:{lat:35.2,lon:137.1,zoom:7},
+  tohoku:{lat:39.5,lon:141.0,zoom:6},
+  kyushu:{lat:33.0,lon:130.5,zoom:6}
 };
 let radarMap=null, radarLayer=null, radarFrames=[], radarIdx=0;
 let radarPlaying=false, radarTimer=null, radarInited=false;
@@ -866,8 +866,8 @@ function initRadar(){
   if(radarInited)return;
   radarInited=true;
   const area=RADAR_AREAS[radarArea];
-  radarMap=L.map('radarMap',{zoomControl:true,attributionControl:false,minZoom:3,maxZoom:12}).setView([area.lat,area.lon],area.zoom);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{minZoom:3,maxZoom:12}).addTo(radarMap);
+  radarMap=L.map('radarMap',{zoomControl:true,attributionControl:false,minZoom:3,maxZoom:7}).setView([area.lat,area.lon],area.zoom);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{minZoom:3,maxZoom:7}).addTo(radarMap);
   L.control.attribution({position:'bottomleft'}).addTo(radarMap);
   fetchRadarFrames();
 }
@@ -905,7 +905,7 @@ function showRadarFrame(idx){
   if(radarLayer)radarMap.removeLayer(radarLayer);
   radarLayer=L.tileLayer(
     `https://tilecache.rainviewer.com${frame.path}/256/{z}/{x}/{y}/2/1_1.png`,
-    {opacity:0.7,minZoom:3,maxZoom:12,tileSize:256,zIndex:10}
+    {opacity:0.7,minZoom:3,maxZoom:7,tileSize:256,zIndex:10}
   );
   radarLayer.addTo(radarMap);
 }
