@@ -659,6 +659,7 @@ body.has-notif .wrap{padding-top:42px;}
           <div class="chat-win-name" id="chatWinName">--</div>
           <div class="chat-win-status disconnected" id="chatWinStatus">未接続</div>
         </div>
+        <button onclick="clearAllMsgs()" style="background:rgba(255,107,107,.12);border:1px solid rgba(255,107,107,.25);border-radius:8px;padding:5px 9px;color:var(--accent3);font-size:11px;cursor:pointer;white-space:nowrap;" title="履歴全削除">🗑 履歴</button>
         <button class="call-btn" id="callBtn" onclick="startCall()" title="音声通話">📞</button>
       </div>
       <!-- input は order:-1 で上部表示 -->
@@ -1262,32 +1263,24 @@ function initPeer(){
     debug:0,
     config:{
       iceServers:[
-        // Google STUN（複数）
+        // Google STUN
         {urls:'stun:stun.l.google.com:19302'},
         {urls:'stun:stun1.l.google.com:19302'},
-        {urls:'stun:stun2.l.google.com:19302'},
-        {urls:'stun:stun3.l.google.com:19302'},
         // Cloudflare STUN
         {urls:'stun:stun.cloudflare.com:3478'},
-        // Open Relay 無料TURN（NAT越え強化）
-        {
-          urls:'turn:openrelay.metered.ca:80',
-          username:'openrelayproject',
-          credential:'openrelayproject'
-        },
-        {
-          urls:'turn:openrelay.metered.ca:443',
-          username:'openrelayproject',
-          credential:'openrelayproject'
-        },
-        {
-          urls:'turn:openrelay.metered.ca:443?transport=tcp',
-          username:'openrelayproject',
-          credential:'openrelayproject'
-        }
+        // Open Relay TURN — TCPを優先（LTEでNAT越えしやすい）
+        {urls:'turn:openrelay.metered.ca:443?transport=tcp',
+         username:'openrelayproject',credential:'openrelayproject'},
+        {urls:'turn:openrelay.metered.ca:443',
+         username:'openrelayproject',credential:'openrelayproject'},
+        {urls:'turn:openrelay.metered.ca:80',
+         username:'openrelayproject',credential:'openrelayproject'},
       ],
       iceCandidatePoolSize:10,
-      iceTransportPolicy:'all'
+      // LTE環境ではTURN経由を強制する方が速い場合が多い
+      iceTransportPolicy:'all',
+      bundlePolicy:'max-bundle',      // メディア＋データを1本にまとめて遅延削減
+      rtcpMuxPolicy:'require',        // RTCP多重化で接続を最小化
     }
   };
   myPeer = sid ? new Peer(sid,peerCfg) : new Peer(peerCfg);
@@ -1361,6 +1354,19 @@ function bindConn(conn){
   });
   conn.on('data',data=>{
     if(data&&data.__ping)return;
+    // 切断シグナル受信 → 着信モーダルや通話画面を強制終了
+    if(data&&data.__hangup){
+      if(pendingCall&&pendingCall.peer===pid){
+        g('incallModal').classList.remove('show');
+        stopRingSound(); vibStop();
+        try{pendingCall.close();}catch(e){}
+        pendingCall=null;
+        addMissedCall();
+      } else if(currentCall&&currentCall.peer===pid){
+        endCallUI();
+      }
+      return;
+    }
     const text=typeof data==='string'?data:(data.text||JSON.stringify(data));
     if(!chatHistory[pid])chatHistory[pid]=[];
     chatHistory[pid].unshift({type:'theirs',text,time:nowStr()});
@@ -1424,15 +1430,34 @@ function renderContacts(){
   if(!contacts.length){el.innerHTML='<div class="msg-system" style="margin:8px 0">連絡先なし。下のフォームで追加</div>';return;}
   el.innerHTML=contacts.map((c,i)=>{
     const open=!!(activeConns[c.id]&&activeConns[c.id].open);
-    return`<div class="contact-item" onclick="openChat(contacts[${i}])">
-      <div class="contact-avatar">${c.emoji}</div>
-      <div class="contact-info">
-        <div class="contact-name">${escHtml(c.name)}</div>
-        <div class="contact-conn ${open?'on':'off'}">${open?'● 接続中':'○ 未接続'}</div>
+    return`<div class="contact-item">
+      <div style="flex:1;display:flex;align-items:center;gap:10px;min-width:0" onclick="openChat(contacts[${i}])">
+        <div class="contact-avatar">${c.emoji}</div>
+        <div class="contact-info">
+          <div class="contact-name">${escHtml(c.name)}</div>
+          <div class="contact-conn ${open?'on':'off'}">${open?'● 接続中':'○ 未接続'}</div>
+        </div>
+        <div class="contact-badge ${c.unread?'show':''}">${c.unread||''}</div>
       </div>
-      <div class="contact-badge ${c.unread?'show':''}">${c.unread||''}</div>
+      <button class="sched-del" onclick="event.stopPropagation();deleteContact(${i})" style="margin-left:6px;flex-shrink:0">🗑</button>
     </div>`;
   }).join('');
+}
+
+function deleteContact(i){
+  const c=contacts[i];
+  if(!c)return;
+  if(!confirm(`「${c.name}」を連絡先から削除しますか？\nチャット履歴も削除されます。`))return;
+  // 接続を切る
+  if(activeConns[c.id]){try{activeConns[c.id].close();}catch(e){}delete activeConns[c.id];}
+  clearTimeout(reconnTimers[c.id]);
+  delete reconnTimers[c.id];
+  // 履歴削除
+  delete chatHistory[c.id];
+  contacts.splice(i,1);
+  chatSave(); renderContacts(); updateNotifBar();
+  // もし開いていたチャット画面なら閉じる
+  if(currentContact&&currentContact.id===c.id)closeChat();
 }
 
 function openChat(contact){
@@ -1474,10 +1499,29 @@ function renderMsgs(pid){
   const el=g('chatMessages');
   const msgs=chatHistory[pid]||[];
   if(!msgs.length){el.innerHTML='<div class="msg-system">まだメッセージがありません</div>';return;}
-  el.innerHTML=msgs.map(m=>{
+  el.innerHTML=msgs.map((m,i)=>{
     if(m.type==='system')return`<div class="msg-system">${escHtml(m.text)}</div>`;
-    return`<div class="msg ${m.type}"><div class="msg-bubble">${escHtml(m.text)}</div><div class="msg-time">${m.time}</div></div>`;
+    return`<div class="msg ${m.type}">
+      <div class="msg-bubble">${escHtml(m.text)}</div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <div class="msg-time">${m.time}</div>
+        <button onclick="deleteMsg('${pid}',${i})" style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;padding:0;line-height:1" title="削除">🗑</button>
+      </div>
+    </div>`;
   }).join('');
+}
+
+function deleteMsg(pid,i){
+  if(!chatHistory[pid])return;
+  chatHistory[pid].splice(i,1);
+  chatSave(); renderMsgs(pid);
+}
+
+function clearAllMsgs(){
+  if(!currentContact)return;
+  if(!confirm('このチャットの履歴をすべて削除しますか？'))return;
+  chatHistory[currentContact.id]=[];
+  chatSave(); renderMsgs(currentContact.id);
 }
 function addSysMsg(pid,text){
   if(!chatHistory[pid])chatHistory[pid]=[];
@@ -1491,21 +1535,59 @@ async function startCall(){
   if(!currentContact||!activeConns[currentContact.id]?.open)return;
   try{ localStream=await navigator.mediaDevices.getUserMedia({audio:true,video:false}); }
   catch(e){alert('マイクへのアクセスが必要です:\n'+e.message);return;}
+
+  // 音声トラックの設定を最適化（低遅延）
+  localStream.getAudioTracks().forEach(t=>{
+    if(t.applyConstraints)t.applyConstraints({
+      echoCancellation:true,
+      noiseSuppression:true,
+      autoGainControl:true,
+      latency:0,          // 最低レイテンシを要求
+      sampleRate:16000,   // 通話品質で十分な16kHz（帯域節約）
+    }).catch(()=>{});
+  });
+
   const call=myPeer.call(currentContact.id,localStream);
   currentCall=call;
   const contact=currentContact;
   showCallOverlay(contact,'発信中... 📞');
-  call.on('stream',rs=>{g('remoteAudio').srcObject=rs;startCallTimer();g('callStatusBig').textContent='通話中 🟢';g('callBtn').classList.add('incall');});
-  call.on('close',()=>endCallUI());
-  call.on('error',()=>endCallUI());
+
+  // タイムアウト：20秒応答なければ自動キャンセル
+  const callTimeout=setTimeout(()=>{
+    if(currentCall===call){
+      sendHangupSignal(contact.id);
+      endCallUI();
+      addSysMsg(contact.id,'📞 応答なし');
+    }
+  },20000);
+
+  call.on('stream',rs=>{
+    clearTimeout(callTimeout);
+    g('remoteAudio').srcObject=rs;
+    startCallTimer();
+    g('callStatusBig').textContent='通話中 🟢';
+    g('callBtn').classList.add('incall');
+  });
+  // WebRTCのcloseは届かないことがあるので補助として残す
+  call.on('close',()=>{clearTimeout(callTimeout);endCallUI();});
+  call.on('error',()=>{clearTimeout(callTimeout);endCallUI();});
 }
+
 function acceptCall(){
   g('incallModal').classList.remove('show');
   stopRingSound(); vibStop();
   if(!pendingCall)return;
   const call=pendingCall; pendingCall=null;
   navigator.mediaDevices.getUserMedia({audio:true,video:false}).then(stream=>{
-    localStream=stream; call.answer(stream); currentCall=call;
+    // 同様に低遅延設定
+    stream.getAudioTracks().forEach(t=>{
+      if(t.applyConstraints)t.applyConstraints({
+        echoCancellation:true,noiseSuppression:true,autoGainControl:true,latency:0,sampleRate:16000
+      }).catch(()=>{});
+    });
+    localStream=stream;
+    call.answer(stream);
+    currentCall=call;
     const c=contacts.find(x=>x.id===call.peer)||{emoji:'🧑',name:call.peer.slice(0,8)};
     showCallOverlay(c,'通話中 🟢');
     call.on('stream',rs=>{g('remoteAudio').srcObject=rs;startCallTimer();});
@@ -1513,24 +1595,47 @@ function acceptCall(){
     call.on('error',()=>endCallUI());
   }).catch(e=>{alert('マイクへのアクセスが必要です:\n'+e.message);pendingCall=null;});
 }
+
 function rejectCall(){
   g('incallModal').classList.remove('show');
   stopRingSound(); vibStop();
-  addMissedCall(); // 不在着信カウント
-  if(pendingCall){try{pendingCall.close();}catch(e){}pendingCall=null;}
+  addMissedCall();
+  if(pendingCall){
+    // 発信側にも拒否シグナルを送る
+    sendHangupSignal(pendingCall.peer);
+    try{pendingCall.close();}catch(e){}
+    pendingCall=null;
+  }
 }
+
 function hangUp(){
-  if(currentCall){try{currentCall.close();}catch(e){}currentCall=null;}
+  if(currentCall){
+    // データチャネル経由で切断シグナルを確実に送る
+    sendHangupSignal(currentCall.peer);
+    setTimeout(()=>{try{currentCall.close();}catch(e){}currentCall=null;},200);
+  }
   endCallUI();
 }
+
+// データチャネルで切断シグナルを送る（WebRTCのcloseが届かない問題の対策）
+function sendHangupSignal(pid){
+  const conn=activeConns[pid];
+  if(conn&&conn.open){
+    try{conn.send({__hangup:true});}catch(e){}
+  }
+}
+
 function endCallUI(){
   stopCallTimer(); stopRingSound(); vibStop();
+  // 着信モーダルも確実に閉じる
+  g('incallModal').classList.remove('show');
   if(localStream){localStream.getTracks().forEach(t=>t.stop());localStream=null;}
   g('remoteAudio').srcObject=null;
   g('callOverlay').classList.remove('show');
   const cb=g('callBtn'); if(cb)cb.classList.remove('incall');
   isMuted=false;
   const mb=g('mutBtn'); if(mb){mb.textContent='🎤';mb.classList.remove('muted');}
+  currentCall=null;
 }
 function showCallOverlay(contact,status){
   g('callAvatar').textContent=contact.emoji||'🧑';
