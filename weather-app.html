@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>天気まとめ</title>
+<link rel="icon" id="dynFavicon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>🌤</text></svg>">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
@@ -353,9 +354,41 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .incoming-btns{display:flex;gap:10px;}
 .incoming-accept{flex:1;background:linear-gradient(135deg,#4caf50,#66bb6a);border:none;border-radius:12px;padding:11px;color:#fff;font-weight:700;font-size:14px;cursor:pointer;}
 .incoming-reject{flex:1;background:linear-gradient(135deg,var(--accent3),#ff4444);border:none;border-radius:12px;padding:11px;color:#fff;font-weight:700;font-size:14px;cursor:pointer;}
-</style>
-</head>
+/* ── 通知バナー ── */
+.notif-bar{display:none;position:fixed;top:0;left:0;right:0;z-index:99999;background:linear-gradient(135deg,#0d1f3a,#0a1628);border-bottom:2px solid var(--accent);padding:0;font-family:'Noto Sans JP',sans-serif;}
+.notif-bar.show{display:block;}
+.notif-inner{display:flex;align-items:center;gap:0;overflow:hidden;}
+.notif-item{display:flex;align-items:center;gap:8px;padding:7px 14px;border-right:1px solid rgba(255,255,255,.08);cursor:pointer;transition:background .15s;flex-shrink:0;}
+.notif-item:hover{background:rgba(0,212,255,.12);}
+.notif-item:last-child{border-right:none;}
+.notif-icon{font-size:16px;flex-shrink:0;}
+.notif-text{font-size:12px;font-weight:700;white-space:nowrap;}
+.notif-text.chat-color{color:var(--accent);}
+.notif-text.call-color{color:#ff6b6b;animation:npulse .8s infinite;}
+.notif-badge{background:var(--accent3);color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:2px;flex-shrink:0;}
+.notif-close{margin-left:auto;padding:7px 12px;color:var(--muted);font-size:14px;cursor:pointer;border-left:1px solid rgba(255,255,255,.08);flex-shrink:0;}
+.notif-close:hover{color:var(--text);}
+@keyframes npulse{0%,100%{opacity:1}50%{opacity:.4}}
+/* バナー分のスペースを確保 */
+body.has-notif .wrap{padding-top:42px;}
+</style></head>
 <body>
+<!-- ── 通知バナー（常時表示） ── -->
+<div class="notif-bar" id="notifBar">
+  <div class="notif-inner">
+    <div class="notif-item" id="notifCallItem" style="display:none" onclick="switchNav('chat')">
+      <span class="notif-icon">📞</span>
+      <span class="notif-text call-color" id="notifCallText">不在着信</span>
+      <span class="notif-badge" id="notifCallBadge">1</span>
+    </div>
+    <div class="notif-item" id="notifMsgItem" style="display:none" onclick="switchNav('chat')">
+      <span class="notif-icon">💬</span>
+      <span class="notif-text chat-color" id="notifMsgText">未読メッセージ</span>
+      <span class="notif-badge" id="notifMsgBadge">0</span>
+    </div>
+    <div class="notif-close" onclick="dismissNotif()">✕</div>
+  </div>
+</div>
 <div class="stars" id="stars"></div>
 <div class="wrap">
 
@@ -1033,7 +1066,11 @@ function switchNav(name){
   g('panel-'+name).classList.add('active');
   if(name==='browser')g('browserInput').focus();
   if(name==='radar')initRadar();
-  if(name==='chat'&&!myPeer)initPeer();
+  if(name==='chat'){
+    if(!myPeer)initPeer();
+    clearMissedCalls();
+    updateNotifBar();
+  }
 }
 
 // ─── 雨雲レーダー (気象庁ナウキャスト＋短時間予報 + Leaflet) ───
@@ -1219,7 +1256,39 @@ function chatLoad(){
 function initPeer(){
   chatLoad(); renderContacts();
   let sid=null; try{sid=localStorage.getItem('myPeerId_v1');}catch(e){}
-  myPeer = sid ? new Peer(sid,{debug:0}) : new Peer({debug:0});
+  const peerCfg={
+    debug:0,
+    config:{
+      iceServers:[
+        // Google STUN（複数）
+        {urls:'stun:stun.l.google.com:19302'},
+        {urls:'stun:stun1.l.google.com:19302'},
+        {urls:'stun:stun2.l.google.com:19302'},
+        {urls:'stun:stun3.l.google.com:19302'},
+        // Cloudflare STUN
+        {urls:'stun:stun.cloudflare.com:3478'},
+        // Open Relay 無料TURN（NAT越え強化）
+        {
+          urls:'turn:openrelay.metered.ca:80',
+          username:'openrelayproject',
+          credential:'openrelayproject'
+        },
+        {
+          urls:'turn:openrelay.metered.ca:443',
+          username:'openrelayproject',
+          credential:'openrelayproject'
+        },
+        {
+          urls:'turn:openrelay.metered.ca:443?transport=tcp',
+          username:'openrelayproject',
+          credential:'openrelayproject'
+        }
+      ],
+      iceCandidatePoolSize:10,
+      iceTransportPolicy:'all'
+    }
+  };
+  myPeer = sid ? new Peer(sid,peerCfg) : new Peer(peerCfg);
   myPeer.on('open',id=>{
     try{localStorage.setItem('myPeerId_v1',id);}catch(e){}
     g('myPeerId').textContent=id;
@@ -1239,6 +1308,15 @@ function initPeer(){
     g('incallName').textContent=getContactName(call.peer);
     g('incallModal').classList.add('show');
     startRingSound(); vibRing(); // 着信音＋バイブ
+    // 相手が諦めた場合も不在着信
+    call.on('close',()=>{
+      if(pendingCall===call){
+        g('incallModal').classList.remove('show');
+        stopRingSound(); vibStop();
+        pendingCall=null;
+        addMissedCall();
+      }
+    });
   });
   myPeer.on('disconnected',()=>{
     setPeerStatus('','シグナリング切断... 再接続中');
@@ -1287,7 +1365,7 @@ function bindConn(conn){
     chatSave();
     playChatSound(); vibChat(); // 受信音＋バイブ
     if(currentContact&&currentContact.id===pid){renderMsgs(pid);}
-    else{const c=contacts.find(x=>x.id===pid);if(c){c.unread=(c.unread||0)+1;chatSave();renderContacts();}}
+    else{const c=contacts.find(x=>x.id===pid);if(c){c.unread=(c.unread||0)+1;chatSave();renderContacts();updateNotifBar();}}
   });
   conn.on('close',()=>{
     clearInterval(conn._ping);
@@ -1359,7 +1437,7 @@ function openChat(contact){
   if(!contact)return;
   currentContact=contact;
   const ci=contacts.find(x=>x.id===contact.id);
-  if(ci){ci.unread=0;chatSave();}
+  if(ci){ci.unread=0;chatSave();updateNotifBar();}
   g('chatWinName').textContent=contact.emoji+' '+contact.name;
   renderMsgs(contact.id); refreshChatUI();
   g('chat-list-view').style.display='none';
@@ -1436,6 +1514,7 @@ function acceptCall(){
 function rejectCall(){
   g('incallModal').classList.remove('show');
   stopRingSound(); vibStop();
+  addMissedCall(); // 不在着信カウント
   if(pendingCall){try{pendingCall.close();}catch(e){}pendingCall=null;}
 }
 function hangUp(){
@@ -1495,7 +1574,70 @@ function copyMyId(){
 function nowStr(){return new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});}
 function escHtml(t){return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');}
 
-// ══ 通知音・バイブ (Web Audio API — 外部ファイル不要) ══
+// ══ 通知バナー・タイトル管理 ══
+let missedCalls=0;
+
+function getTotalUnread(){
+  return contacts.reduce((s,c)=>s+(c.unread||0),0);
+}
+
+function updateNotifBar(){
+  const unread=getTotalUnread();
+  const hasMissed=missedCalls>0;
+  const hasUnread=unread>0;
+  const show=hasMissed||hasUnread;
+
+  // バナー表示
+  const bar=g('notifBar');
+  bar.classList.toggle('show',show);
+  document.body.classList.toggle('has-notif',show);
+
+  // 不在着信
+  const callItem=g('notifCallItem');
+  callItem.style.display=hasMissed?'flex':'none';
+  if(hasMissed){
+    g('notifCallBadge').textContent=missedCalls;
+    g('notifCallText').textContent='不在着信';
+  }
+
+  // 未読メッセージ
+  const msgItem=g('notifMsgItem');
+  msgItem.style.display=hasUnread?'flex':'none';
+  if(hasUnread){
+    g('notifMsgBadge').textContent=unread;
+    g('notifMsgText').textContent='未読メッセージ';
+  }
+
+  // タイトルバー
+  const parts=[];
+  if(hasMissed) parts.push(`📞${missedCalls}件の不在着信`);
+  if(hasUnread)  parts.push(`💬${unread}件の未読`);
+  document.title = parts.length ? parts.join(' | ')+' — 天気まとめ' : '天気まとめ';
+
+  // favicon
+  const fav=g('dynFavicon');
+  if(fav){
+    let icon = show ? (hasMissed?'📞':'💬') : '🌤';
+    fav.href=`data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>${icon}</text></svg>`;
+  }
+}
+
+function dismissNotif(){
+  // バナーを一時的に閉じるだけ（未読はクリアしない）
+  g('notifBar').classList.remove('show');
+  document.body.classList.remove('has-notif');
+}
+
+function addMissedCall(){
+  missedCalls++;
+  updateNotifBar();
+}
+function clearMissedCalls(){
+  missedCalls=0;
+  updateNotifBar();
+}
+
+
 let _audioCtx=null;
 function getAudioCtx(){
   if(!_audioCtx)_audioCtx=new(window.AudioContext||window.webkitAudioContext)();
