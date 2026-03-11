@@ -1069,6 +1069,8 @@ function switchNav(name){
   if(name==='chat'){
     if(!myPeer)initPeer();
     clearMissedCalls();
+    // チャットタブを開いたら dismissed を解除＆バナー再評価
+    g('notifBar').dataset.dismissed='';
     updateNotifBar();
   }
 }
@@ -1586,50 +1588,56 @@ function updateNotifBar(){
   const hasMissed=missedCalls>0;
   const hasUnread=unread>0;
   const show=hasMissed||hasUnread;
+  const dismissed=g('notifBar').dataset.dismissed==='1';
 
-  // バナー表示
+  // 不在着信は×後でも強制表示、メッセージは×後は非表示
+  const showBar = hasMissed || (hasUnread && !dismissed);
   const bar=g('notifBar');
-  bar.classList.toggle('show',show);
-  document.body.classList.toggle('has-notif',show);
+  bar.classList.toggle('show', showBar);
+  document.body.classList.toggle('has-notif', showBar);
 
-  // 不在着信
+  // 不在着信アイテム
   const callItem=g('notifCallItem');
   callItem.style.display=hasMissed?'flex':'none';
   if(hasMissed){
     g('notifCallBadge').textContent=missedCalls;
-    g('notifCallText').textContent='不在着信';
+    g('notifCallText').textContent=`不在着信 ${missedCalls}件`;
   }
 
-  // 未読メッセージ
+  // 未読メッセージアイテム
   const msgItem=g('notifMsgItem');
   msgItem.style.display=hasUnread?'flex':'none';
   if(hasUnread){
     g('notifMsgBadge').textContent=unread;
-    g('notifMsgText').textContent='未読メッセージ';
+    // 誰から来たか表示
+    const senders=contacts.filter(c=>c.unread>0).map(c=>c.name).join('・');
+    g('notifMsgText').textContent=senders||'未読メッセージ';
   }
 
-  // タイトルバー
+  // タイトルバー（常時更新）
   const parts=[];
-  if(hasMissed) parts.push(`📞${missedCalls}件の不在着信`);
-  if(hasUnread)  parts.push(`💬${unread}件の未読`);
-  document.title = parts.length ? parts.join(' | ')+' — 天気まとめ' : '天気まとめ';
+  if(hasMissed) parts.push(`📞${missedCalls}件不在`);
+  if(hasUnread)  parts.push(`💬${unread}件未読`);
+  document.title = parts.length ? '('+parts.join(' ')+'） 天気まとめ' : '天気まとめ';
 
-  // favicon
+  // favicon動的切り替え
   const fav=g('dynFavicon');
   if(fav){
-    let icon = show ? (hasMissed?'📞':'💬') : '🌤';
+    const icon = hasMissed ? '📞' : hasUnread ? '💬' : '🌤';
     fav.href=`data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>${icon}</text></svg>`;
   }
 }
 
 function dismissNotif(){
-  // バナーを一時的に閉じるだけ（未読はクリアしない）
+  // ×を押したらバナーを最小化（タイトルは更新し続ける）
+  g('notifBar').dataset.dismissed='1';
   g('notifBar').classList.remove('show');
   document.body.classList.remove('has-notif');
 }
 
 function addMissedCall(){
   missedCalls++;
+  g('notifBar').dataset.dismissed=''; // 不在着信は強制再表示
   updateNotifBar();
 }
 function clearMissedCalls(){
