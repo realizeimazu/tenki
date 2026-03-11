@@ -363,7 +363,6 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 <div class="app-header">
   <div class="app-header-left">
     <div class="app-lbl">Real-time Weather</div>
-    <div class="app-name">天気まとめ</div>
   </div>
   <div class="app-header-moon" id="header-moon"></div>
 </div>
@@ -378,16 +377,16 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 
 <!-- ── Nav ── -->
 <div class="top-nav">
-  <button class="nav-btn active" onclick="switchNav('chat')">💬 チャット</button>
-  <button class="nav-btn" onclick="switchNav('weather')">🔍 天気検索</button>
-  <button class="nav-btn" onclick="switchNav('home')">🏠 ホーム</button>
-  <button class="nav-btn" onclick="switchNav('radar')">🌧 レーダー</button>
+  <button class="nav-btn active" onclick="switchNav('home')">🏠 天気まとめ</button>
   <button class="nav-btn" onclick="switchNav('browser')">🌐 検索</button>
+  <button class="nav-btn" id="chat-nav-btn" onclick="switchNav('chat')">💬 チャット</button>
+  <button class="nav-btn" onclick="switchNav('weather')">🔍 天気検索</button>
+  <button class="nav-btn" onclick="switchNav('radar')">🌧 レーダー</button>
   <button class="nav-btn" onclick="switchNav('memo')">📅 予定</button>
 </div>
 
 <!-- ═══════ HOME ═══════ -->
-<div class="panel" id="panel-home">
+<div class="panel active" id="panel-home">
   <!-- 月齢カード（共通） -->
   <div id="shared-moon" class="moon-card fade-in"></div>
 
@@ -591,7 +590,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 </div>
 
 <!-- ═══════ CHAT ═══════ -->
-<div class="panel active" id="panel-chat">
+<div class="panel" id="panel-chat">
   <div class="chat-outer">
     <!-- 連絡先リスト -->
     <div id="chat-list-view">
@@ -1028,7 +1027,7 @@ function renderMemos(){
 
 // ─── Nav ───
 function switchNav(name){
-  const names=['chat','weather','home','radar','browser','memo'];
+  const names=['home','browser','chat','weather','radar','memo'];
   document.querySelectorAll('.nav-btn').forEach((b,i)=>b.classList.toggle('active',names[i]===name));
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   g('panel-'+name).classList.add('active');
@@ -1239,6 +1238,7 @@ function initPeer(){
     pendingCall=call;
     g('incallName').textContent=getContactName(call.peer);
     g('incallModal').classList.add('show');
+    startRingSound(); vibRing(); // 着信音＋バイブ
   });
   myPeer.on('disconnected',()=>{
     setPeerStatus('','シグナリング切断... 再接続中');
@@ -1285,6 +1285,7 @@ function bindConn(conn){
     if(!chatHistory[pid])chatHistory[pid]=[];
     chatHistory[pid].unshift({type:'theirs',text,time:nowStr()});
     chatSave();
+    playChatSound(); vibChat(); // 受信音＋バイブ
     if(currentContact&&currentContact.id===pid){renderMsgs(pid);}
     else{const c=contacts.find(x=>x.id===pid);if(c){c.unread=(c.unread||0)+1;chatSave();renderContacts();}}
   });
@@ -1420,6 +1421,7 @@ async function startCall(){
 }
 function acceptCall(){
   g('incallModal').classList.remove('show');
+  stopRingSound(); vibStop();
   if(!pendingCall)return;
   const call=pendingCall; pendingCall=null;
   navigator.mediaDevices.getUserMedia({audio:true,video:false}).then(stream=>{
@@ -1433,6 +1435,7 @@ function acceptCall(){
 }
 function rejectCall(){
   g('incallModal').classList.remove('show');
+  stopRingSound(); vibStop();
   if(pendingCall){try{pendingCall.close();}catch(e){}pendingCall=null;}
 }
 function hangUp(){
@@ -1440,7 +1443,7 @@ function hangUp(){
   endCallUI();
 }
 function endCallUI(){
-  stopCallTimer();
+  stopCallTimer(); stopRingSound(); vibStop();
   if(localStream){localStream.getTracks().forEach(t=>t.stop());localStream=null;}
   g('remoteAudio').srcObject=null;
   g('callOverlay').classList.remove('show');
@@ -1492,6 +1495,69 @@ function copyMyId(){
 function nowStr(){return new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});}
 function escHtml(t){return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');}
 
+// ══ 通知音・バイブ (Web Audio API — 外部ファイル不要) ══
+let _audioCtx=null;
+function getAudioCtx(){
+  if(!_audioCtx)_audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+  // suspended状態を解除（ユーザー操作後に自動再開）
+  if(_audioCtx.state==='suspended')_audioCtx.resume();
+  return _audioCtx;
+}
+
+// チャット受信音：軽快な2音ポップ
+function playChatSound(){
+  try{
+    const ctx=getAudioCtx();
+    [[0,880,0.12],[0.12,1108,0.1]].forEach(([t,freq,dur])=>{
+      const o=ctx.createOscillator();
+      const g2=ctx.createGain();
+      o.connect(g2); g2.connect(ctx.destination);
+      o.type='sine'; o.frequency.value=freq;
+      g2.gain.setValueAtTime(0,ctx.currentTime+t);
+      g2.gain.linearRampToValueAtTime(0.18,ctx.currentTime+t+0.01);
+      g2.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+t+dur);
+      o.start(ctx.currentTime+t);
+      o.stop(ctx.currentTime+t+dur+0.05);
+    });
+  }catch(e){}
+}
+
+// 電話着信音：繰り返しリング（3回）
+let _ringTimer=null;
+function startRingSound(){
+  stopRingSound();
+  let count=0;
+  function ring(){
+    if(count>=3)return;
+    count++;
+    try{
+      const ctx=getAudioCtx();
+      // 2音セット（ドリリリン風）
+      [[0,480,0.1],[0.12,600,0.1],[0.25,480,0.1],[0.37,600,0.1]].forEach(([t,freq,dur])=>{
+        const o=ctx.createOscillator();
+        const gn=ctx.createGain();
+        o.connect(gn); gn.connect(ctx.destination);
+        o.type='square'; o.frequency.value=freq;
+        gn.gain.setValueAtTime(0,ctx.currentTime+t);
+        gn.gain.linearRampToValueAtTime(0.12,ctx.currentTime+t+0.01);
+        gn.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+t+dur);
+        o.start(ctx.currentTime+t);
+        o.stop(ctx.currentTime+t+dur+0.05);
+      });
+    }catch(e){}
+    _ringTimer=setTimeout(ring,1800);
+  }
+  ring();
+}
+function stopRingSound(){
+  clearTimeout(_ringTimer); _ringTimer=null;
+}
+
+// バイブ
+function vibChat(){try{navigator.vibrate&&navigator.vibrate([60,40,60]);}catch(e){}}
+function vibRing(){try{navigator.vibrate&&navigator.vibrate([200,150,200,150,200]);}catch(e){}}
+function vibStop(){try{navigator.vibrate&&navigator.vibrate(0);}catch(e){}}
+
 window.addEventListener('load',()=>{
   loadLoc('kofu');
   loadLoc('fujisawa');
@@ -1503,8 +1569,11 @@ window.addEventListener('load',()=>{
   const age=getMoonAge(new Date());
   const hm=g('header-moon');
   if(hm)hm.innerHTML=`${getMoonEmoji(age)}<br>${getMoonName(age)}<br><span style="font-size:9px;opacity:.7">月齢${age.toFixed(0)}</span>`;
-  // チャット初期化（最初から）
+  // チャット：バックグラウンドで接続開始（タブを開かなくても着信・受信できる）
   initPeer();
+  // 最初のタップでAudioContextをアンロック
+  document.addEventListener('touchstart',()=>{try{getAudioCtx();}catch(e){}},{once:true});
+  document.addEventListener('click',()=>{try{getAudioCtx();}catch(e){}},{once:true});
 });
 </script>
 </body>
