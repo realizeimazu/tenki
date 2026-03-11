@@ -313,6 +313,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .msg.theirs{align-self:flex-start;align-items:flex-start;}
 .msg-bubble{padding:8px 12px;border-radius:14px;font-size:13px;line-height:1.5;word-break:break-word;}
 .msg.mine .msg-bubble{background:linear-gradient(135deg,rgba(0,212,255,.25),rgba(123,104,238,.2));border:1px solid rgba(0,212,255,.3);border-bottom-right-radius:3px;}
+.msg.mine.pending-msg .msg-bubble{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-bottom-right-radius:3px;opacity:.65;}
 .msg.theirs .msg-bubble{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);border-bottom-left-radius:3px;}
 .msg-time{font-size:9px;color:var(--muted);font-family:'Space Mono',monospace;}
 .msg-system{align-self:center;font-size:10px;color:var(--muted);background:rgba(255,255,255,.04);border-radius:20px;padding:3px 11px;font-family:'Space Mono',monospace;text-align:center;}
@@ -1238,7 +1239,7 @@ g('schedDate').value=new Date().toISOString().slice(0,10);
 // ══════════════════════════════════════════
 let myPeer=null, currentContact=null;
 let activeConns={}, reconnTimers={};
-let contacts=[], chatHistory={};
+let contacts=[], chatHistory={}, msgQueue={}; // msgQueue: {peerId: [{text,time}]}
 let pendingConn=null;
 const EMOJIS=['🧑','👩','🧔','👦','👧','🐱','🐶','🦊','🐼','🐨'];
 // 通話
@@ -1247,12 +1248,14 @@ let callTimer=null, callSeconds=0, isMuted=false;
 
 function chatSave(){
   try{localStorage.setItem('chat_contacts',JSON.stringify(contacts));
-      localStorage.setItem('chat_history',JSON.stringify(chatHistory));}catch(e){}
+      localStorage.setItem('chat_history',JSON.stringify(chatHistory));
+      localStorage.setItem('chat_queue',JSON.stringify(msgQueue));}catch(e){}
 }
 function chatLoad(){
   try{
     const c=localStorage.getItem('chat_contacts'); if(c)contacts=JSON.parse(c);
     const h=localStorage.getItem('chat_history');  if(h)chatHistory=JSON.parse(h);
+    const q=localStorage.getItem('chat_queue');    if(q)msgQueue=JSON.parse(q);
   }catch(e){}
 }
 
@@ -1349,6 +1352,7 @@ function bindConn(conn){
     renderContacts();
     clearTimeout(reconnTimers[pid]);
     addSysMsg(pid,'接続しました 🎉');
+    flushQueue(pid,conn); // 送信待ちを即フラッシュ
     if(currentContact&&currentContact.id===pid)refreshChatUI();
     conn._ping=setInterval(()=>{if(conn.open)try{conn.send({__ping:true});}catch(e){}else clearInterval(conn._ping);},30000);
   });
@@ -1393,10 +1397,17 @@ function setPeerStatus(cls,text){
 function refreshChatUI(){
   if(!currentContact)return;
   const open=!!(activeConns[currentContact.id]&&activeConns[currentContact.id].open);
-  setWinStatus(open?'connected':'disconnected',open?'接続済み ✅':'再接続中...');
-  g('chatMsgInput').disabled=!open;
-  g('chatSendBtn').disabled=!open;
+  setWinStatus(open?'connected':'disconnected', open?'接続済み ✅':'未接続（送信待ち保存中）');
+  // 未接続でも入力・送信は常に有効
+  g('chatMsgInput').disabled=false;
+  g('chatSendBtn').disabled=false;
   const cb=g('callBtn'); if(cb)cb.disabled=!open;
+  // 送信待ち件数をプレースホルダーで表示
+  const pid=currentContact.id;
+  const qlen=(msgQueue[pid]||[]).length;
+  g('chatMsgInput').placeholder=qlen>0
+    ? `📦 ${qlen}件 送信待ち中... (Enterで追加)`
+    : 'メッセージを入力... (Enterで送信)';
 }
 
 function acceptIncoming(){
@@ -1483,16 +1494,49 @@ function setWinStatus(cls,text){
 
 function sendMsg(){
   if(!currentContact)return;
-  const conn=activeConns[currentContact.id];
   const input=g('chatMsgInput');
   const text=input.value.trim();
-  if(!text||!conn||!conn.open)return;
-  conn.send(text);
+  if(!text)return;
   const pid=currentContact.id;
-  if(!chatHistory[pid])chatHistory[pid]=[];
-  chatHistory[pid].unshift({type:'mine',text,time:nowStr()});
+  const conn=activeConns[pid];
+  const now=nowStr();
+
+  if(conn&&conn.open){
+    // 接続中 → 即送信
+    conn.send(text);
+    if(!chatHistory[pid])chatHistory[pid]=[];
+    chatHistory[pid].unshift({type:'mine',text,time:now});
+  } else {
+    // 未接続 → キューに積む
+    if(!msgQueue[pid])msgQueue[pid]=[];
+    msgQueue[pid].push({text,time:now});
+    if(!chatHistory[pid])chatHistory[pid]=[];
+    chatHistory[pid].unshift({type:'mine',text,time:now,pending:true});
+    addSysMsg(pid,'📦 送信待ちに追加しました（接続時に自動送信）');
+  }
   chatSave(); input.value='';
-  renderMsgs(pid);
+  renderMsgs(pid); refreshChatUI();
+}
+
+// 接続時にキューを一括フラッシュ
+function flushQueue(pid,conn){
+  const queue=msgQueue[pid];
+  if(!queue||!queue.length)return;
+  let sent=0;
+  queue.forEach(item=>{
+    try{conn.send(item.text);sent++;}catch(e){}
+  });
+  msgQueue[pid]=[];
+  chatSave();
+  // 送信済みメッセージの pending フラグを外す
+  if(chatHistory[pid]){
+    chatHistory[pid].forEach(m=>{if(m.pending)delete m.pending;});
+    chatSave();
+  }
+  if(sent>0){
+    addSysMsg(pid,`📤 送信待ち ${sent}件 を送信しました`);
+    if(currentContact&&currentContact.id===pid)refreshChatUI();
+  }
 }
 function chatKeyDown(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}}
 function renderMsgs(pid){
@@ -1501,10 +1545,12 @@ function renderMsgs(pid){
   if(!msgs.length){el.innerHTML='<div class="msg-system">まだメッセージがありません</div>';return;}
   el.innerHTML=msgs.map((m,i)=>{
     if(m.type==='system')return`<div class="msg-system">${escHtml(m.text)}</div>`;
-    return`<div class="msg ${m.type}">
+    const pendingCls=m.pending?' pending-msg':'';
+    const pendingIcon=m.pending?' <span style="font-size:10px;opacity:.6">⏳</span>':'';
+    return`<div class="msg ${m.type}${pendingCls}">
       <div class="msg-bubble">${escHtml(m.text)}</div>
       <div style="display:flex;align-items:center;gap:6px">
-        <div class="msg-time">${m.time}</div>
+        <div class="msg-time">${m.time}${pendingIcon}</div>
         <button onclick="deleteMsg('${pid}',${i})" style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;padding:0;line-height:1" title="削除">🗑</button>
       </div>
     </div>`;
