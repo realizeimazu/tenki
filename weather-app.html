@@ -315,7 +315,35 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .msg.theirs .msg-bubble{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);border-bottom-left-radius:3px;}
 .msg-time{font-size:9px;color:var(--muted);font-family:'Space Mono',monospace;}
 .msg-system{align-self:center;font-size:10px;color:var(--muted);background:rgba(255,255,255,.04);border-radius:20px;padding:3px 11px;font-family:'Space Mono',monospace;text-align:center;}
-/* incoming modal */
+/* call button */
+.call-btn{background:linear-gradient(135deg,#4caf50,#66bb6a);border:none;border-radius:50%;width:36px;height:36px;font-size:16px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;box-shadow:0 0 8px rgba(76,175,80,.4);}
+.call-btn:disabled{opacity:.35;cursor:not-allowed;}
+.call-btn.incall{background:linear-gradient(135deg,var(--accent3),#ff4444);animation:cpulse 1.2s infinite;}
+/* call overlay */
+.call-overlay{display:none;position:fixed;inset:0;background:rgba(5,13,26,.95);z-index:9998;flex-direction:column;align-items:center;justify-content:center;gap:20px;}
+.call-overlay.show{display:flex;}
+.call-avatar-big{font-size:72px;filter:drop-shadow(0 0 20px rgba(76,175,80,.5));}
+.call-name-big{font-size:22px;font-weight:700;color:var(--text);}
+.call-status-big{font-size:13px;color:var(--muted);font-family:'Space Mono',monospace;}
+.call-timer{font-family:'Space Mono',monospace;font-size:28px;font-weight:700;color:var(--accent);min-width:80px;text-align:center;}
+.call-btns-row{display:flex;gap:24px;margin-top:10px;}
+.call-action-btn{width:64px;height:64px;border-radius:50%;border:none;font-size:26px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.call-mute-btn{background:rgba(255,255,255,.12);color:var(--text);}
+.call-mute-btn.muted{background:rgba(255,107,107,.25);color:var(--accent3);}
+.call-hangup-btn{background:linear-gradient(135deg,var(--accent3),#ff4444);color:#fff;box-shadow:0 0 16px rgba(255,107,107,.5);}
+.call-speaker-btn{background:rgba(255,255,255,.12);color:var(--text);}
+/* incoming call overlay */
+.incall-modal{display:none;position:fixed;inset:0;background:rgba(5,13,26,.92);z-index:9999;align-items:center;justify-content:center;}
+.incall-modal.show{display:flex;}
+.incall-box{background:var(--card);border:2px solid rgba(76,175,80,.5);border-radius:22px;padding:28px 24px;text-align:center;width:280px;animation:fi .3s ease;}
+.incall-ring{font-size:54px;animation:cpulse 1s infinite;}
+.incall-name{font-size:18px;font-weight:700;margin:10px 0 4px;}
+.incall-sub{font-size:12px;color:var(--muted);margin-bottom:22px;}
+.incall-btns{display:flex;gap:14px;justify-content:center;}
+.incall-accept{width:62px;height:62px;border-radius:50%;background:linear-gradient(135deg,#4caf50,#66bb6a);border:none;font-size:24px;cursor:pointer;box-shadow:0 0 14px rgba(76,175,80,.5);}
+.incall-reject{width:62px;height:62px;border-radius:50%;background:linear-gradient(135deg,var(--accent3),#ff4444);border:none;font-size:24px;cursor:pointer;box-shadow:0 0 14px rgba(255,107,107,.4);}
+/* hidden audio */
+#remoteAudio{display:none;}
 .incoming-modal{display:none;position:fixed;inset:0;background:rgba(5,13,26,.88);z-index:9999;align-items:center;justify-content:center;}
 .incoming-modal.show{display:flex;}
 .incoming-box{background:var(--card);border:2px solid rgba(0,212,255,.4);border-radius:20px;padding:24px;text-align:center;width:270px;animation:fi .3s ease;}
@@ -335,7 +363,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 <div class="app-header">
   <div class="app-header-left">
     <div class="app-lbl">Real-time Weather</div>
-    <div class="app-name">🌐 天気まとめ</div>
+    <div class="app-name">天気まとめ</div>
   </div>
   <div class="app-header-moon" id="header-moon"></div>
 </div>
@@ -351,11 +379,11 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 <!-- ── Nav ── -->
 <div class="top-nav">
   <button class="nav-btn active" onclick="switchNav('chat')">💬 チャット</button>
+  <button class="nav-btn" onclick="switchNav('weather')">🔍 天気検索</button>
   <button class="nav-btn" onclick="switchNav('home')">🏠 ホーム</button>
   <button class="nav-btn" onclick="switchNav('radar')">🌧 レーダー</button>
   <button class="nav-btn" onclick="switchNav('browser')">🌐 検索</button>
   <button class="nav-btn" onclick="switchNav('memo')">📅 予定</button>
-  <button class="nav-btn" onclick="switchNav('weather')">🔍 天気検索</button>
 </div>
 
 <!-- ═══════ HOME ═══════ -->
@@ -595,10 +623,11 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
     <div class="chat-window" id="chatWindow">
       <div class="chat-win-header">
         <button class="chat-back-btn" onclick="closeChat()">← 戻る</button>
-        <div>
+        <div style="flex:1">
           <div class="chat-win-name" id="chatWinName">--</div>
           <div class="chat-win-status disconnected" id="chatWinStatus">未接続</div>
         </div>
+        <button class="call-btn" id="callBtn" onclick="startCall()" title="音声通話">📞</button>
       </div>
       <!-- input は order:-1 で上部表示 -->
       <div class="chat-input-row">
@@ -624,6 +653,34 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
     </div>
   </div>
 </div>
+
+<!-- 通話中オーバーレイ -->
+<div class="call-overlay" id="callOverlay">
+  <div class="call-avatar-big" id="callAvatar">🧑</div>
+  <div class="call-name-big" id="callNameBig">--</div>
+  <div class="call-status-big" id="callStatusBig">発信中...</div>
+  <div class="call-timer" id="callTimer" style="display:none">00:00</div>
+  <div class="call-btns-row">
+    <button class="call-action-btn call-mute-btn" id="mutBtn" onclick="toggleMute()" title="ミュート">🎤</button>
+    <button class="call-action-btn call-hangup-btn" onclick="hangUp()" title="切る">📵</button>
+    <button class="call-action-btn call-speaker-btn" id="spkBtn" onclick="toggleSpeaker()" title="スピーカー">🔊</button>
+  </div>
+</div>
+
+<!-- 着信通話モーダル -->
+<div class="incall-modal" id="incallModal">
+  <div class="incall-box">
+    <div class="incall-ring">📞</div>
+    <div class="incall-name" id="incallName">--</div>
+    <div class="incall-sub">音声通話の着信</div>
+    <div class="incall-btns">
+      <button class="incall-accept" onclick="acceptCall()">📞</button>
+      <button class="incall-reject" onclick="rejectCall()">📵</button>
+    </div>
+  </div>
+</div>
+
+<audio id="remoteAudio" autoplay playsinline></audio>
 <script>
 // Stars
 const se=document.getElementById('stars');
@@ -971,7 +1028,7 @@ function renderMemos(){
 
 // ─── Nav ───
 function switchNav(name){
-  const names=['chat','home','radar','browser','memo','weather'];
+  const names=['chat','weather','home','radar','browser','memo'];
   document.querySelectorAll('.nav-btn').forEach((b,i)=>b.classList.toggle('active',names[i]===name));
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   g('panel-'+name).classList.add('active');
@@ -1138,14 +1195,16 @@ g('browserInput').addEventListener('keydown',e=>{if(e.key==='Enter')doSearch();}
 g('schedDate').value=new Date().toISOString().slice(0,10);
 
 // ══════════════════════════════════════════
-// CHAT — PeerJS 接続維持・自動再接続・承認不要
+// CHAT — PeerJS 接続維持・自動再接続・音声通話
 // ══════════════════════════════════════════
 let myPeer=null, currentContact=null;
-let activeConns={}; // peerId → DataConnection
-let reconnTimers={}; // peerId → timer
+let activeConns={}, reconnTimers={};
 let contacts=[], chatHistory={};
-let pendingConn=null; // 未登録の着信
+let pendingConn=null;
 const EMOJIS=['🧑','👩','🧔','👦','👧','🐱','🐶','🦊','🐼','🐨'];
+// 通話
+let localStream=null, currentCall=null, pendingCall=null;
+let callTimer=null, callSeconds=0, isMuted=false;
 
 function chatSave(){
   try{localStorage.setItem('chat_contacts',JSON.stringify(contacts));
@@ -1158,39 +1217,33 @@ function chatLoad(){
   }catch(e){}
 }
 
-// ── PeerJS 初期化 ──
 function initPeer(){
   chatLoad(); renderContacts();
   let sid=null; try{sid=localStorage.getItem('myPeerId_v1');}catch(e){}
   myPeer = sid ? new Peer(sid,{debug:0}) : new Peer({debug:0});
-
   myPeer.on('open',id=>{
     try{localStorage.setItem('myPeerId_v1',id);}catch(e){}
     g('myPeerId').textContent=id;
     setPeerStatus('online','オンライン ✅');
-    // 全連絡先へ自動接続
     contacts.forEach(c=>schedConnect(c.id,0));
   });
-
-  // 着信
   myPeer.on('connection',conn=>{
-    const known=contacts.find(x=>x.id===conn.peer);
-    if(known){
-      // 登録済み → 即受け入れ
-      bindConn(conn);
-    } else {
-      // 未登録 → モーダル
+    if(contacts.find(x=>x.id===conn.peer)){ bindConn(conn); }
+    else{
       pendingConn=conn;
       g('incomingName').textContent=conn.peer.slice(0,16)+'...';
       g('incomingModal').classList.add('show');
     }
   });
-
+  myPeer.on('call',call=>{
+    pendingCall=call;
+    g('incallName').textContent=getContactName(call.peer);
+    g('incallModal').classList.add('show');
+  });
   myPeer.on('disconnected',()=>{
     setPeerStatus('','シグナリング切断... 再接続中');
     setTimeout(()=>{try{myPeer.reconnect();}catch(e){}},2000);
   });
-
   myPeer.on('error',err=>{
     setPeerStatus('','エラー: '+err.type);
     if(err.type==='unavailable-id'){
@@ -1200,88 +1253,65 @@ function initPeer(){
   });
 }
 
-// ── 接続スケジュール（自動再接続ループ） ──
-function schedConnect(pid, delay){
-  clearTimeout(reconnTimers[pid]);
-  reconnTimers[pid]=setTimeout(()=>doConnect(pid), delay);
+function getContactName(pid){
+  const c=contacts.find(x=>x.id===pid);
+  return c?(c.emoji+' '+c.name):pid.slice(0,8)+'...';
 }
 
+function schedConnect(pid,delay){
+  clearTimeout(reconnTimers[pid]);
+  reconnTimers[pid]=setTimeout(()=>doConnect(pid),delay);
+}
 function doConnect(pid){
   if(!myPeer||myPeer.destroyed||myPeer.disconnected)return;
-  // すでに開いていればスキップ
   if(activeConns[pid]&&activeConns[pid].open)return;
-  const conn=myPeer.connect(pid,{reliable:true,serialization:'json'});
-  bindConn(conn);
+  bindConn(myPeer.connect(pid,{reliable:true,serialization:'json'}));
 }
-
 function bindConn(conn){
   const pid=conn.peer;
-  // 古い接続を閉じる
-  if(activeConns[pid]&&activeConns[pid]!==conn){
-    try{activeConns[pid].close();}catch(e){}
-  }
+  if(activeConns[pid]&&activeConns[pid]!==conn){try{activeConns[pid].close();}catch(e){}}
   activeConns[pid]=conn;
-  updateContactStatus(pid,'connecting');
-
   conn.on('open',()=>{
     activeConns[pid]=conn;
-    updateContactStatus(pid,'on');
+    renderContacts();
     clearTimeout(reconnTimers[pid]);
     addSysMsg(pid,'接続しました 🎉');
-    if(currentContact&&currentContact.id===pid) refreshChatUI();
-    // キープアライブ ping（30秒ごと）
-    conn._ping=setInterval(()=>{
-      if(conn.open)try{conn.send({__ping:true});}catch(e){}
-      else clearInterval(conn._ping);
-    },30000);
+    if(currentContact&&currentContact.id===pid)refreshChatUI();
+    conn._ping=setInterval(()=>{if(conn.open)try{conn.send({__ping:true});}catch(e){}else clearInterval(conn._ping);},30000);
   });
-
   conn.on('data',data=>{
-    if(data&&data.__ping)return; // pingは無視
+    if(data&&data.__ping)return;
     const text=typeof data==='string'?data:(data.text||JSON.stringify(data));
     if(!chatHistory[pid])chatHistory[pid]=[];
-    chatHistory[pid].push({type:'theirs',text,time:nowStr()});
+    chatHistory[pid].unshift({type:'theirs',text,time:nowStr()});
     chatSave();
-    if(currentContact&&currentContact.id===pid){renderMsgs(pid);scrollMsgs();}
+    if(currentContact&&currentContact.id===pid){renderMsgs(pid);}
     else{const c=contacts.find(x=>x.id===pid);if(c){c.unread=(c.unread||0)+1;chatSave();renderContacts();}}
   });
-
   conn.on('close',()=>{
     clearInterval(conn._ping);
-    if(activeConns[pid]===conn) delete activeConns[pid];
-    updateContactStatus(pid,'off');
+    if(activeConns[pid]===conn)delete activeConns[pid];
+    renderContacts();
     addSysMsg(pid,'切断されました。再接続中...');
-    if(currentContact&&currentContact.id===pid) refreshChatUI();
-    // 5秒後に自動再接続
+    if(currentContact&&currentContact.id===pid)refreshChatUI();
     schedConnect(pid,5000);
   });
-
-  conn.on('error',()=>{
-    clearInterval(conn._ping);
-    updateContactStatus(pid,'off');
-    schedConnect(pid,8000);
-  });
+  conn.on('error',()=>{clearInterval(conn._ping);delete activeConns[pid];renderContacts();schedConnect(pid,8000);});
 }
 
-// ── UI 更新ヘルパー ──
 function setPeerStatus(cls,text){
   g('peerDot').className='chat-dot'+(cls?' '+cls:'');
   g('peerStatusText').textContent=text;
 }
-function updateContactStatus(pid,state){
-  renderContacts();
-  if(currentContact&&currentContact.id===pid) refreshChatUI();
-}
 function refreshChatUI(){
   if(!currentContact)return;
-  const pid=currentContact.id;
-  const open=activeConns[pid]&&activeConns[pid].open;
-  setWinStatus(open?'connected':'disconnected', open?'接続済み ✅':'再接続中...');
+  const open=!!(activeConns[currentContact.id]&&activeConns[currentContact.id].open);
+  setWinStatus(open?'connected':'disconnected',open?'接続済み ✅':'再接続中...');
   g('chatMsgInput').disabled=!open;
   g('chatSendBtn').disabled=!open;
+  const cb=g('callBtn'); if(cb)cb.disabled=!open;
 }
 
-// ── 着信モーダル ──
 function acceptIncoming(){
   g('incomingModal').classList.remove('show');
   if(!pendingConn)return;
@@ -1295,10 +1325,9 @@ function acceptIncoming(){
 }
 function rejectIncoming(){
   g('incomingModal').classList.remove('show');
-  if(pendingConn){try{pendingConn.close();}catch(e){} pendingConn=null;}
+  if(pendingConn){try{pendingConn.close();}catch(e){}pendingConn=null;}
 }
 
-// ── 連絡先 ──
 function addContact(){
   const name=g('addContactName').value.trim();
   const id=g('addContactId').value.trim();
@@ -1307,17 +1336,14 @@ function addContact(){
   contacts.push({name:name||id.slice(0,6),id,emoji:EMOJIS[contacts.length%EMOJIS.length],unread:0});
   chatSave(); renderContacts();
   g('addContactName').value=''; g('addContactId').value='';
-  if(myPeer&&!myPeer.destroyed) schedConnect(id,500);
+  if(myPeer&&!myPeer.destroyed)schedConnect(id,500);
 }
 function renderContacts(){
-  const el=g('contactList');
-  if(!contacts.length){
-    el.innerHTML='<div class="msg-system" style="margin:8px 0">連絡先なし。下のフォームで追加</div>';
-    return;
-  }
+  const el=g('contactList'); if(!el)return;
+  if(!contacts.length){el.innerHTML='<div class="msg-system" style="margin:8px 0">連絡先なし。下のフォームで追加</div>';return;}
   el.innerHTML=contacts.map((c,i)=>{
-    const open=activeConns[c.id]&&activeConns[c.id].open;
-    return `<div class="contact-item" onclick="openChat(contacts[${i}])">
+    const open=!!(activeConns[c.id]&&activeConns[c.id].open);
+    return`<div class="contact-item" onclick="openChat(contacts[${i}])">
       <div class="contact-avatar">${c.emoji}</div>
       <div class="contact-info">
         <div class="contact-name">${escHtml(c.name)}</div>
@@ -1328,14 +1354,13 @@ function renderContacts(){
   }).join('');
 }
 
-// ── チャット画面 ──
 function openChat(contact){
   if(!contact)return;
   currentContact=contact;
   const ci=contacts.find(x=>x.id===contact.id);
   if(ci){ci.unread=0;chatSave();}
   g('chatWinName').textContent=contact.emoji+' '+contact.name;
-  renderMsgs(contact.id); scrollMsgs(); refreshChatUI();
+  renderMsgs(contact.id); refreshChatUI();
   g('chat-list-view').style.display='none';
   g('chatWindow').classList.add('open');
   g('chatMsgInput').focus();
@@ -1350,7 +1375,6 @@ function setWinStatus(cls,text){
   el.className='chat-win-status '+cls; el.textContent=text;
 }
 
-// ── メッセージ送受信 ──
 function sendMsg(){
   if(!currentContact)return;
   const conn=activeConns[currentContact.id];
@@ -1360,9 +1384,9 @@ function sendMsg(){
   conn.send(text);
   const pid=currentContact.id;
   if(!chatHistory[pid])chatHistory[pid]=[];
-  chatHistory[pid].push({type:'mine',text,time:nowStr()});
+  chatHistory[pid].unshift({type:'mine',text,time:nowStr()});
   chatSave(); input.value='';
-  renderMsgs(pid); scrollMsgs();
+  renderMsgs(pid);
 }
 function chatKeyDown(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}}
 function renderMsgs(pid){
@@ -1376,11 +1400,87 @@ function renderMsgs(pid){
 }
 function addSysMsg(pid,text){
   if(!chatHistory[pid])chatHistory[pid]=[];
-  chatHistory[pid].push({type:'system',text});
+  chatHistory[pid].unshift({type:'system',text});
   chatSave();
-  if(currentContact&&currentContact.id===pid){renderMsgs(pid);scrollMsgs();}
+  if(currentContact&&currentContact.id===pid)renderMsgs(pid);
 }
-function scrollMsgs(){setTimeout(()=>{const el=g('chatMessages');el.scrollTop=el.scrollHeight;},40);}
+
+// ══ 音声通話 ══
+async function startCall(){
+  if(!currentContact||!activeConns[currentContact.id]?.open)return;
+  try{ localStream=await navigator.mediaDevices.getUserMedia({audio:true,video:false}); }
+  catch(e){alert('マイクへのアクセスが必要です:\n'+e.message);return;}
+  const call=myPeer.call(currentContact.id,localStream);
+  currentCall=call;
+  const contact=currentContact;
+  showCallOverlay(contact,'発信中... 📞');
+  call.on('stream',rs=>{g('remoteAudio').srcObject=rs;startCallTimer();g('callStatusBig').textContent='通話中 🟢';g('callBtn').classList.add('incall');});
+  call.on('close',()=>endCallUI());
+  call.on('error',()=>endCallUI());
+}
+function acceptCall(){
+  g('incallModal').classList.remove('show');
+  if(!pendingCall)return;
+  const call=pendingCall; pendingCall=null;
+  navigator.mediaDevices.getUserMedia({audio:true,video:false}).then(stream=>{
+    localStream=stream; call.answer(stream); currentCall=call;
+    const c=contacts.find(x=>x.id===call.peer)||{emoji:'🧑',name:call.peer.slice(0,8)};
+    showCallOverlay(c,'通話中 🟢');
+    call.on('stream',rs=>{g('remoteAudio').srcObject=rs;startCallTimer();});
+    call.on('close',()=>endCallUI());
+    call.on('error',()=>endCallUI());
+  }).catch(e=>{alert('マイクへのアクセスが必要です:\n'+e.message);pendingCall=null;});
+}
+function rejectCall(){
+  g('incallModal').classList.remove('show');
+  if(pendingCall){try{pendingCall.close();}catch(e){}pendingCall=null;}
+}
+function hangUp(){
+  if(currentCall){try{currentCall.close();}catch(e){}currentCall=null;}
+  endCallUI();
+}
+function endCallUI(){
+  stopCallTimer();
+  if(localStream){localStream.getTracks().forEach(t=>t.stop());localStream=null;}
+  g('remoteAudio').srcObject=null;
+  g('callOverlay').classList.remove('show');
+  const cb=g('callBtn'); if(cb)cb.classList.remove('incall');
+  isMuted=false;
+  const mb=g('mutBtn'); if(mb){mb.textContent='🎤';mb.classList.remove('muted');}
+}
+function showCallOverlay(contact,status){
+  g('callAvatar').textContent=contact.emoji||'🧑';
+  g('callNameBig').textContent=contact.name||'--';
+  g('callStatusBig').textContent=status;
+  g('callTimer').style.display='none';
+  g('callStatusBig').style.display='block';
+  g('callOverlay').classList.add('show');
+}
+function startCallTimer(){
+  callSeconds=0;
+  g('callTimer').style.display='block';
+  g('callStatusBig').style.display='none';
+  callTimer=setInterval(()=>{
+    callSeconds++;
+    const m=String(Math.floor(callSeconds/60)).padStart(2,'0');
+    const s=String(callSeconds%60).padStart(2,'0');
+    g('callTimer').textContent=m+':'+s;
+  },1000);
+}
+function stopCallTimer(){clearInterval(callTimer);callTimer=null;}
+function toggleMute(){
+  if(!localStream)return;
+  isMuted=!isMuted;
+  localStream.getAudioTracks().forEach(t=>t.enabled=!isMuted);
+  const mb=g('mutBtn');
+  mb.textContent=isMuted?'🔇':'🎤';
+  mb.classList.toggle('muted',isMuted);
+}
+function toggleSpeaker(){
+  const b=g('spkBtn');
+  b.style.opacity=b.style.opacity==='0.5'?'1':'0.5';
+}
+
 function copyMyId(){
   const id=g('myPeerId').textContent;
   if(!id||id==='接続中...')return;
@@ -1391,7 +1491,6 @@ function copyMyId(){
 }
 function nowStr(){return new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});}
 function escHtml(t){return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');}
-
 
 window.addEventListener('load',()=>{
   loadLoc('kofu');
