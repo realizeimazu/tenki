@@ -6,6 +6,7 @@
 <title>天気まとめ</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
@@ -256,6 +257,74 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 
 .fade-in{animation:fi .4s ease forwards;opacity:0;}
 @keyframes fi{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── チャット ── */
+.chat-outer{display:flex;flex-direction:column;gap:10px;}
+.chat-setup{background:var(--card);border:1px solid rgba(0,212,255,.2);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px;}
+.chat-setup-title{font-size:11px;font-weight:700;color:var(--accent);font-family:'Space Mono',monospace;letter-spacing:.15em;text-transform:uppercase;}
+.chat-myid-box{background:rgba(0,212,255,.07);border:1px solid rgba(0,212,255,.25);border-radius:10px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.chat-myid-label{font-size:10px;color:var(--muted);margin-bottom:3px;}
+.chat-myid-val{font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:var(--accent);word-break:break-all;}
+.chat-copy-btn{background:rgba(0,212,255,.15);border:1px solid rgba(0,212,255,.3);border-radius:8px;padding:6px 10px;color:var(--accent);font-size:11px;cursor:pointer;white-space:nowrap;flex-shrink:0;}
+.chat-status-row{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);}
+.chat-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex-shrink:0;transition:background .3s;}
+.chat-dot.online{background:#4caf50;box-shadow:0 0 6px rgba(76,175,80,.6);}
+.chat-dot.calling{background:var(--moon);box-shadow:0 0 6px rgba(245,200,66,.6);animation:pulse 1s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.chat-contacts{display:flex;flex-direction:column;gap:6px;}
+.chat-contact-lbl{font-size:10px;color:var(--muted);font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:.1em;}
+.contact-item{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:11px;padding:10px 12px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:background .15s;}
+.contact-item:hover{background:rgba(0,212,255,.1);border-color:rgba(0,212,255,.25);}
+.contact-item.active-contact{background:rgba(0,212,255,.15);border-color:rgba(0,212,255,.4);}
+.contact-avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
+.contact-info{flex:1;min-width:0;}
+.contact-name{font-size:13px;font-weight:700;}
+.contact-pid{font-size:10px;color:var(--muted);font-family:'Space Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.contact-badge{background:var(--accent3);color:#fff;border-radius:50%;width:18px;height:18px;font-size:10px;display:none;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;}
+.contact-badge.show{display:flex;}
+.chat-add-form{display:flex;gap:6px;flex-wrap:wrap;}
+.chat-add-name{width:90px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:9px 11px;color:var(--text);font-size:12px;font-family:'Noto Sans JP',sans-serif;outline:none;}
+.chat-add-name:focus{border-color:var(--accent2);}
+.chat-add-input{flex:1;min-width:120px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:9px 11px;color:var(--text);font-size:12px;font-family:'Noto Sans JP',sans-serif;outline:none;}
+.chat-add-input:focus{border-color:var(--accent);}
+.chat-add-btn{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:9px;padding:9px 13px;color:#000;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap;}
+.chat-window{display:none;flex-direction:column;background:var(--card);border:1px solid rgba(0,212,255,.2);border-radius:16px;overflow:hidden;height:calc(100vh - 200px);min-height:380px;}
+.chat-window.open{display:flex;}
+.chat-win-header{background:linear-gradient(135deg,rgba(0,212,255,.12),rgba(123,104,238,.1));border-bottom:1px solid rgba(255,255,255,.07);padding:10px 14px;display:flex;align-items:center;gap:10px;}
+.chat-back-btn{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:5px 10px;color:var(--text);font-size:12px;cursor:pointer;}
+.chat-win-name{font-size:14px;font-weight:700;flex:1;}
+.chat-win-status{font-size:10px;font-family:'Space Mono',monospace;}
+.chat-win-status.connected{color:#4caf50;}
+.chat-win-status.disconnected{color:var(--muted);}
+.chat-win-status.connecting{color:var(--moon);}
+.chat-connect-btn{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:8px;padding:6px 11px;color:#000;font-weight:700;font-size:11px;cursor:pointer;white-space:nowrap;}
+.chat-connect-btn.disconnect{background:linear-gradient(135deg,var(--accent3),#ff4444);color:#fff;}
+.chat-messages{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;scrollbar-width:thin;scrollbar-color:rgba(0,212,255,.2) transparent;}
+.chat-messages::-webkit-scrollbar{width:4px;}
+.chat-messages::-webkit-scrollbar-thumb{background:rgba(0,212,255,.2);border-radius:2px;}
+.msg{max-width:78%;display:flex;flex-direction:column;gap:2px;animation:fi .2s ease;}
+.msg.mine{align-self:flex-end;align-items:flex-end;}
+.msg.theirs{align-self:flex-start;align-items:flex-start;}
+.msg-bubble{padding:9px 12px;border-radius:14px;font-size:13px;line-height:1.5;word-break:break-word;}
+.msg.mine .msg-bubble{background:linear-gradient(135deg,rgba(0,212,255,.25),rgba(123,104,238,.2));border:1px solid rgba(0,212,255,.3);border-bottom-right-radius:4px;}
+.msg.theirs .msg-bubble{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);border-bottom-left-radius:4px;}
+.msg-time{font-size:9px;color:var(--muted);font-family:'Space Mono',monospace;}
+.msg-system{align-self:center;font-size:11px;color:var(--muted);background:rgba(255,255,255,.04);border-radius:20px;padding:4px 12px;font-family:'Space Mono',monospace;text-align:center;}
+.chat-input-row{border-top:1px solid rgba(255,255,255,.07);padding:10px;display:flex;gap:8px;}
+.chat-msg-input{flex:1;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:10px 13px;color:var(--text);font-size:13px;font-family:'Noto Sans JP',sans-serif;outline:none;resize:none;}
+.chat-msg-input:focus{border-color:var(--accent);}
+.chat-msg-input:disabled{opacity:.4;}
+.chat-send-btn{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:12px;padding:10px 14px;color:#000;font-weight:700;font-size:16px;cursor:pointer;align-self:flex-end;}
+.chat-send-btn:disabled{opacity:.4;cursor:not-allowed;}
+.incoming-modal{display:none;position:fixed;inset:0;background:rgba(5,13,26,.88);z-index:9999;align-items:center;justify-content:center;}
+.incoming-modal.show{display:flex;}
+.incoming-box{background:var(--card);border:2px solid rgba(0,212,255,.4);border-radius:20px;padding:24px;text-align:center;width:280px;animation:fi .3s ease;}
+.incoming-icon{font-size:48px;margin-bottom:10px;animation:pulse 1s infinite;}
+.incoming-name{font-size:18px;font-weight:700;margin-bottom:4px;}
+.incoming-sub{font-size:12px;color:var(--muted);margin-bottom:20px;}
+.incoming-btns{display:flex;gap:10px;}
+.incoming-accept{flex:1;background:linear-gradient(135deg,#4caf50,#66bb6a);border:none;border-radius:12px;padding:12px;color:#fff;font-weight:700;font-size:14px;cursor:pointer;}
+.incoming-reject{flex:1;background:linear-gradient(135deg,var(--accent3),#ff4444);border:none;border-radius:12px;padding:12px;color:#fff;font-weight:700;font-size:14px;cursor:pointer;}
 </style>
 </head>
 <body>
@@ -286,6 +355,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
   <button class="nav-btn" onclick="switchNav('browser')">🌐 検索</button>
   <button class="nav-btn" onclick="switchNav('memo')">📅 予定</button>
   <button class="nav-btn" onclick="switchNav('weather')">🔍 天気検索</button>
+  <button class="nav-btn" id="chat-nav-btn" onclick="switchNav('chat')">💬 チャット</button>
 </div>
 
 <!-- ═══════ HOME ═══════ -->
@@ -492,7 +562,70 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
   </div>
 </div>
 
+<!-- ═══════ CHAT ═══════ -->
+<div class="panel" id="panel-chat">
+  <div class="chat-outer">
+    <!-- セットアップ＆連絡先 -->
+    <div id="chat-list-view">
+      <div class="chat-setup">
+        <div class="chat-setup-title">💬 1対1 チャット</div>
+        <div class="chat-myid-box">
+          <div>
+            <div class="chat-myid-label">あなたのID（相手に教える）</div>
+            <div class="chat-myid-val" id="myPeerId">接続中...</div>
+          </div>
+          <button class="chat-copy-btn" onclick="copyMyId()">📋 コピー</button>
+        </div>
+        <div class="chat-status-row">
+          <div class="chat-dot" id="peerDot"></div>
+          <span id="peerStatusText">PeerJS に接続中...</span>
+        </div>
+      </div>
+
+      <div class="chat-contacts">
+        <div class="chat-contact-lbl">📋 連絡先</div>
+        <div id="contactList"></div>
+        <div class="chat-add-form">
+          <input type="text" class="chat-add-name" id="addContactName" placeholder="名前">
+          <input type="text" class="chat-add-input" id="addContactId" placeholder="相手のPeer ID">
+          <button class="chat-add-btn" onclick="addContact()">追加</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- チャット画面 -->
+    <div class="chat-window" id="chatWindow">
+      <div class="chat-win-header">
+        <button class="chat-back-btn" onclick="closeChat()">← 戻る</button>
+        <div>
+          <div class="chat-win-name" id="chatWinName">--</div>
+          <div class="chat-win-status disconnected" id="chatWinStatus">未接続</div>
+        </div>
+        <button class="chat-connect-btn" id="chatConnectBtn" onclick="toggleConnect()">接続</button>
+      </div>
+      <div class="chat-messages" id="chatMessages"></div>
+      <div class="chat-input-row">
+        <textarea class="chat-msg-input" id="chatMsgInput" placeholder="メッセージを入力..." rows="1" disabled onkeydown="chatKeyDown(event)"></textarea>
+        <button class="chat-send-btn" id="chatSendBtn" onclick="sendMsg()" disabled>➤</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 </div><!-- /wrap -->
+
+<!-- ═══ INCOMING CALL MODAL ═══ -->
+<div class="incoming-modal" id="incomingModal">
+  <div class="incoming-box">
+    <div class="incoming-icon">💬</div>
+    <div class="incoming-name" id="incomingName">--</div>
+    <div class="incoming-sub">接続リクエストが届いています</div>
+    <div class="incoming-btns">
+      <button class="incoming-accept" onclick="acceptIncoming()">✅ 承認</button>
+      <button class="incoming-reject" onclick="rejectIncoming()">❌ 拒否</button>
+    </div>
+  </div>
+</div>
 <script>
 // Stars
 const se=document.getElementById('stars');
@@ -840,12 +973,13 @@ function renderMemos(){
 
 // ─── Nav ───
 function switchNav(name){
-  const names=['home','radar','weather','memo','browser'];
+  const names=['home','radar','weather','memo','browser','chat'];
   document.querySelectorAll('.nav-btn').forEach((b,i)=>b.classList.toggle('active',names[i]===name));
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   g('panel-'+name).classList.add('active');
   if(name==='browser')g('browserInput').focus();
   if(name==='radar')initRadar();
+  if(name==='chat'&&!myPeer)initPeer();
 }
 
 // ─── 雨雲レーダー (気象庁ナウキャスト＋短時間予報 + Leaflet) ───
@@ -1004,6 +1138,288 @@ function doSearch(){
 g('locationInput').addEventListener('keydown',e=>{if(e.key==='Enter')search();});
 g('browserInput').addEventListener('keydown',e=>{if(e.key==='Enter')doSearch();});
 g('schedDate').value=new Date().toISOString().slice(0,10);
+
+// ═══════════════════════════════
+// CHAT — PeerJS 1対1チャット
+// ═══════════════════════════════
+let myPeer=null, currentConn=null, currentContact=null, incomingConn=null;
+let contacts=[]; // {name,id,emoji,unread}
+let chatHistory={}; // {peerId:[{type,text,time}]}
+const CHAT_CONTACTS_KEY='chatContacts_v1';
+const CHAT_HIST_KEY='chatHistory_v1';
+const EMOJIS=['🧑','👩','🧔','👦','👧','🐱','🐶','🦊','🐼','🐨'];
+
+function chatStoreSave(){
+  try{localStorage.setItem(CHAT_CONTACTS_KEY,JSON.stringify(contacts));
+      localStorage.setItem(CHAT_HIST_KEY,JSON.stringify(chatHistory));}catch(e){}
+}
+function chatStoreLoad(){
+  try{
+    const c=localStorage.getItem(CHAT_CONTACTS_KEY);
+    if(c)contacts=JSON.parse(c);
+    const h=localStorage.getItem(CHAT_HIST_KEY);
+    if(h)chatHistory=JSON.parse(h);
+  }catch(e){}
+}
+
+function initPeer(){
+  chatStoreLoad();
+  renderContacts();
+  // 保存されたIDがあれば再利用
+  let savedId=null;
+  try{savedId=localStorage.getItem('myPeerId_v1');}catch(e){}
+  const opts={debug:0};
+  myPeer = savedId ? new Peer(savedId,opts) : new Peer(opts);
+
+  myPeer.on('open',id=>{
+    try{localStorage.setItem('myPeerId_v1',id);}catch(e){}
+    g('myPeerId').textContent=id;
+    g('peerDot').className='chat-dot online';
+    g('peerStatusText').textContent='オンライン（接続準備完了）';
+  });
+
+  myPeer.on('connection',conn=>{
+    const senderName=getContactName(conn.peer);
+    incomingConn=conn;
+    g('incomingName').textContent=senderName+' ('+conn.peer.slice(0,8)+'...)';
+    g('incomingModal').classList.add('show');
+    conn.on('close',()=>{if(incomingConn===conn)incomingConn=null;});
+  });
+
+  myPeer.on('error',err=>{
+    g('peerDot').className='chat-dot';
+    g('peerStatusText').textContent='エラー: '+err.type;
+    // IDが被った場合はランダムIDで再試行
+    if(err.type==='unavailable-id'){
+      try{localStorage.removeItem('myPeerId_v1');}catch(e){}
+      setTimeout(()=>{myPeer=null;initPeer();},1000);
+    }
+  });
+
+  myPeer.on('disconnected',()=>{
+    g('peerDot').className='chat-dot';
+    g('peerStatusText').textContent='切断中... 再接続を試みています';
+    setTimeout(()=>{try{myPeer.reconnect();}catch(e){}},2000);
+  });
+}
+
+function getContactName(pid){
+  const c=contacts.find(x=>x.id===pid);
+  return c?c.name:pid.slice(0,8)+'...';
+}
+
+function acceptIncoming(){
+  g('incomingModal').classList.remove('show');
+  if(!incomingConn)return;
+  const conn=incomingConn;
+  incomingConn=null;
+  // 連絡先になければ自動追加
+  if(!contacts.find(x=>x.id===conn.peer)){
+    contacts.push({name:'Unknown',id:conn.peer,emoji:EMOJIS[contacts.length%EMOJIS.length],unread:0});
+    chatStoreSave();
+    renderContacts();
+  }
+  openChat(contacts.find(x=>x.id===conn.peer)||{name:'Unknown',id:conn.peer,emoji:'🧑'});
+  setupConn(conn);
+}
+
+function rejectIncoming(){
+  g('incomingModal').classList.remove('show');
+  if(incomingConn){incomingConn.close();incomingConn=null;}
+}
+
+function addContact(){
+  const name=g('addContactName').value.trim();
+  const id=g('addContactId').value.trim();
+  if(!id){alert('Peer IDを入力してください');return;}
+  if(contacts.find(x=>x.id===id)){alert('すでに追加されています');return;}
+  contacts.push({name:name||id.slice(0,6),id,emoji:EMOJIS[contacts.length%EMOJIS.length],unread:0});
+  chatStoreSave();
+  renderContacts();
+  g('addContactName').value='';
+  g('addContactId').value='';
+}
+
+function renderContacts(){
+  const el=g('contactList');
+  if(!contacts.length){
+    el.innerHTML='<div class="msg-system" style="margin:8px 0">連絡先がありません<br>相手のIDを追加してください</div>';
+    return;
+  }
+  el.innerHTML=contacts.map((c,i)=>`
+    <div class="contact-item" id="contact-item-${i}" onclick="openChat(contacts[${i}])">
+      <div class="contact-avatar" style="background:rgba(0,212,255,.1)">${c.emoji}</div>
+      <div class="contact-info">
+        <div class="contact-name">${c.name}</div>
+        <div class="contact-pid">${c.id}</div>
+      </div>
+      <div class="contact-badge ${c.unread?'show':''}" id="badge-${i}">${c.unread||''}</div>
+    </div>
+  `).join('');
+}
+
+function openChat(contact){
+  currentContact=contact;
+  g('chatWinName').textContent=contact.emoji+' '+contact.name;
+  setWinStatus('disconnected','未接続');
+  g('chatConnectBtn').textContent='接続';
+  g('chatConnectBtn').className='chat-connect-btn';
+  g('chatMsgInput').disabled=true;
+  g('chatSendBtn').disabled=true;
+  // 未読クリア
+  const ci=contacts.find(x=>x.id===contact.id);
+  if(ci){ci.unread=0;chatStoreSave();renderContacts();}
+  // 既存接続チェック
+  if(currentConn&&currentConn.peer===contact.id&&currentConn.open){
+    setWinStatus('connected','接続済み ✅');
+    g('chatConnectBtn').textContent='切断';
+    g('chatConnectBtn').className='chat-connect-btn disconnect';
+    g('chatMsgInput').disabled=false;
+    g('chatSendBtn').disabled=false;
+  }
+  renderMessages(contact.id);
+  g('chat-list-view').style.display='none';
+  g('chatWindow').classList.add('open');
+  scrollMsgs();
+}
+
+function closeChat(){
+  g('chatWindow').classList.remove('open');
+  g('chat-list-view').style.display='';
+  currentContact=null;
+}
+
+function toggleConnect(){
+  if(!currentContact)return;
+  if(currentConn&&currentConn.open){
+    currentConn.close();
+    currentConn=null;
+    setWinStatus('disconnected','切断しました');
+    g('chatConnectBtn').textContent='接続';
+    g('chatConnectBtn').className='chat-connect-btn';
+    g('chatMsgInput').disabled=true;
+    g('chatSendBtn').disabled=true;
+    addSystemMsg(currentContact.id,'切断しました');
+    return;
+  }
+  if(!myPeer||myPeer.destroyed){initPeer();setTimeout(()=>doConnect(),1500);return;}
+  doConnect();
+}
+
+function doConnect(){
+  if(!currentContact)return;
+  setWinStatus('connecting','接続中... ⏳');
+  g('chatConnectBtn').disabled=true;
+  const conn=myPeer.connect(currentContact.id,{reliable:true});
+  setupConn(conn);
+}
+
+function setupConn(conn){
+  currentConn=conn;
+  conn.on('open',()=>{
+    setWinStatus('connected','接続済み ✅');
+    g('chatConnectBtn').textContent='切断';
+    g('chatConnectBtn').className='chat-connect-btn disconnect';
+    g('chatConnectBtn').disabled=false;
+    g('chatMsgInput').disabled=false;
+    g('chatSendBtn').disabled=false;
+    if(currentContact&&conn.peer===currentContact.id)
+      addSystemMsg(conn.peer,'接続しました 🎉');
+  });
+  conn.on('data',data=>{
+    const pid=conn.peer;
+    if(!chatHistory[pid])chatHistory[pid]=[];
+    chatHistory[pid].push({type:'theirs',text:data,time:nowStr()});
+    chatStoreSave();
+    if(currentContact&&pid===currentContact.id){
+      renderMessages(pid);scrollMsgs();
+    } else {
+      const ci=contacts.find(x=>x.id===pid);
+      if(ci){ci.unread=(ci.unread||0)+1;chatStoreSave();renderContacts();}
+    }
+  });
+  conn.on('close',()=>{
+    if(currentContact&&conn.peer===currentContact.id){
+      setWinStatus('disconnected','相手が切断しました');
+      g('chatConnectBtn').textContent='再接続';
+      g('chatConnectBtn').className='chat-connect-btn';
+      g('chatConnectBtn').disabled=false;
+      g('chatMsgInput').disabled=true;
+      g('chatSendBtn').disabled=true;
+      addSystemMsg(conn.peer,'相手が切断しました');
+    }
+    if(currentConn===conn)currentConn=null;
+  });
+  conn.on('error',()=>{
+    setWinStatus('disconnected','接続エラー');
+    g('chatConnectBtn').disabled=false;
+  });
+}
+
+function sendMsg(){
+  if(!currentConn||!currentConn.open||!currentContact)return;
+  const input=g('chatMsgInput');
+  const text=input.value.trim();
+  if(!text)return;
+  currentConn.send(text);
+  const pid=currentContact.id;
+  if(!chatHistory[pid])chatHistory[pid]=[];
+  chatHistory[pid].push({type:'mine',text,time:nowStr()});
+  chatStoreSave();
+  input.value='';
+  renderMessages(pid);scrollMsgs();
+}
+
+function chatKeyDown(e){
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}
+}
+
+function renderMessages(pid){
+  const el=g('chatMessages');
+  const msgs=chatHistory[pid]||[];
+  if(!msgs.length){
+    el.innerHTML='<div class="msg-system">まだメッセージがありません<br>接続して話しかけてみましょう！</div>';
+    return;
+  }
+  el.innerHTML=msgs.map(m=>{
+    if(m.type==='system') return `<div class="msg-system">${m.text}</div>`;
+    return `<div class="msg ${m.type}"><div class="msg-bubble">${escHtml(m.text)}</div><div class="msg-time">${m.time}</div></div>`;
+  }).join('');
+}
+
+function addSystemMsg(pid,text){
+  if(!chatHistory[pid])chatHistory[pid]=[];
+  chatHistory[pid].push({type:'system',text});
+  chatStoreSave();
+  if(currentContact&&pid===currentContact.id){renderMessages(pid);scrollMsgs();}
+}
+
+function setWinStatus(cls,text){
+  const el=g('chatWinStatus');
+  el.className='chat-win-status '+cls;
+  el.textContent=text;
+}
+
+function scrollMsgs(){setTimeout(()=>{const el=g('chatMessages');el.scrollTop=el.scrollHeight;},50);}
+
+function copyMyId(){
+  const id=g('myPeerId').textContent;
+  if(!id||id==='接続中...')return;
+  navigator.clipboard.writeText(id).then(()=>{
+    const btn=document.querySelector('.chat-copy-btn');
+    btn.textContent='✅ コピー済み';
+    setTimeout(()=>btn.textContent='📋 コピー',2000);
+  }).catch(()=>{
+    prompt('IDをコピーしてください:',id);
+  });
+}
+
+function nowStr(){return new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});}
+function escHtml(t){return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');}
+
+// チャットパネル初期化をswitchNavに組み込む
+
+
 
 window.addEventListener('load',()=>{
   loadLoc('kofu');
