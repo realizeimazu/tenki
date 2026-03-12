@@ -1289,13 +1289,19 @@ let callTimer=null, callSeconds=0, isMuted=false;
 function chatSave(){
   try{localStorage.setItem('chat_contacts',JSON.stringify(contacts));
       localStorage.setItem('chat_history',JSON.stringify(chatHistory));
-      localStorage.setItem('chat_queue',JSON.stringify(msgQueue));}catch(e){}
+      localStorage.setItem('chat_queue',JSON.stringify(msgQueue));
+      if(currentContact)localStorage.setItem('chat_current',currentContact.id);
+      else localStorage.removeItem('chat_current');
+  }catch(e){}
 }
 function chatLoad(){
   try{
     const c=localStorage.getItem('chat_contacts'); if(c)contacts=JSON.parse(c);
     const h=localStorage.getItem('chat_history');  if(h)chatHistory=JSON.parse(h);
     const q=localStorage.getItem('chat_queue');    if(q)msgQueue=JSON.parse(q);
+    // 前回選択していた連絡先を復元
+    const cid=localStorage.getItem('chat_current');
+    if(cid){const found=contacts.find(x=>x.id===cid);if(found)currentContact=found;}
   }catch(e){}
 }
 
