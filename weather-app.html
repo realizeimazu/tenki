@@ -2,8 +2,16 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>天気まとめ</title>
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="天気まとめ">
+<meta name="theme-color" content="#050d1a">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect width='180' height='180' rx='20' fill='%23050d1a'/><text y='130' x='90' font-size='110' text-anchor='middle'>🌤</text></svg>">
 <link rel="icon" id="dynFavicon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>🌤</text></svg>">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -1880,6 +1888,18 @@ function updateNotifBar(){
     const icon = hasMissed ? '📞' : hasUnread ? '💬' : '🌤';
     fav.href=`data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>${icon}</text></svg>`;
   }
+
+  // アプリバッジ（PWA・ホーム画面ショートカット用）
+  const badgeCount = missedCalls + unread;
+  if('setAppBadge' in navigator){
+    badgeCount > 0
+      ? navigator.setAppBadge(badgeCount).catch(()=>{})
+      : navigator.clearAppBadge().catch(()=>{});
+  }
+  // Service Worker経由でもバッジ更新（念のため両方）
+  if(navigator.serviceWorker && navigator.serviceWorker.controller){
+    navigator.serviceWorker.controller.postMessage({type:'UPDATE_BADGE', count:badgeCount});
+  }
 }
 
 function dismissNotif(){
@@ -1979,6 +1999,12 @@ window.addEventListener('load',()=>{
   // 最初のタップでAudioContextをアンロック
   document.addEventListener('touchstart',()=>{try{getAudioCtx();}catch(e){}},{once:true});
   document.addEventListener('click',()=>{try{getAudioCtx();}catch(e){}},{once:true});
+  // Service Worker 登録（PWAバッジ対応）
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('sw.js').then(reg=>{
+      console.log('SW registered:', reg.scope);
+    }).catch(e=>console.log('SW registration failed:', e));
+  }
 });
 
 // ══════════════════════════════════════════
