@@ -51,9 +51,22 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .week-empty{padding:11px 14px;color:var(--muted);font-size:12px;white-space:nowrap;}
 
 /* ── Nav ── */
-.top-nav{display:flex;gap:4px;margin-bottom:12px;background:var(--card);border-radius:13px;padding:4px;position:relative;z-index:300;}
+.top-nav{display:flex;gap:4px;margin-bottom:12px;background:var(--card);border-radius:13px;padding:4px;position:relative;z-index:2;}
 .nav-btn{flex:1;padding:8px 2px;border:none;border-radius:9px;background:transparent;color:var(--muted);font-size:11px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;transition:all .2s;white-space:nowrap;}
 .nav-btn.active{background:linear-gradient(135deg,rgba(0,212,255,.2),rgba(123,104,238,.2));color:var(--text);border:1px solid rgba(0,212,255,.3);}
+
+/* ── 常時表示チャットバー ── */
+#chatQuickBar{position:fixed;bottom:0;left:0;right:0;z-index:10;background:rgba(5,13,26,.97);border-top:1px solid rgba(0,212,255,.2);padding:8px 10px 12px;box-sizing:border-box;}
+#chatQuickBar select{width:100%;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:5px 8px;color:#fff;font-size:12px;font-family:'Noto Sans JP',sans-serif;margin-bottom:6px;box-sizing:border-box;outline:none;}
+#chatQuickBar select option{background:#0d1f3a;}
+#cqRow{display:flex;gap:6px;align-items:flex-end;}
+#cqInput{flex:1;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:8px 11px;color:#fff;font-size:14px;font-family:'Noto Sans JP',sans-serif;outline:none;resize:none;min-height:36px;max-height:72px;line-height:1.4;box-sizing:border-box;}
+#cqInput:focus{border-color:var(--accent);}
+#cqInput:disabled{opacity:.35;}
+#cqSend{width:38px;height:38px;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:9px;color:#000;font-size:17px;font-weight:700;cursor:pointer;flex-shrink:0;}
+#cqSend:disabled{opacity:.3;}
+#cqCall{width:38px;height:38px;background:linear-gradient(135deg,#4caf50,#66bb6a);border:none;border-radius:9px;font-size:17px;cursor:pointer;flex-shrink:0;}
+#cqCall:disabled{opacity:.3;}
 
 /* ── Panels ── */
 .panel{display:none;}.panel.active{display:block;}
@@ -720,6 +733,20 @@ body.has-notif .wrap{padding-top:42px;}
 </div>
 
 <audio id="remoteAudio" autoplay playsinline></audio>
+
+<!-- 常時表示チャットバー -->
+<div id="chatQuickBar">
+  <select id="cqSel" onchange="cqSelChange()">
+    <option value="">— 連絡先を選択 —</option>
+  </select>
+  <div id="cqRow">
+    <textarea id="cqInput" rows="1" placeholder="連絡先を選択してください..." disabled
+      onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();cqSend();}"
+      oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,72)+'px'"></textarea>
+    <button id="cqSend" onclick="cqSend()" disabled>➤</button>
+    <button id="cqCall" onclick="startCall()" disabled>📞</button>
+  </div>
+</div>
 <script>
 // Stars
 const se=document.getElementById('stars');
@@ -1723,8 +1750,76 @@ function toggleSpeaker(){
 
 // ── 固定フッター ──
 // フッター機能削除済み
-function updateFooter(){}
+function updateFooter(){
+  const sel=g('cqSel'); if(!sel)return;
+  const prev=sel.value;
+  sel.innerHTML='<option value="">— 連絡先を選択 —</option>';
+  contacts.forEach(c=>{
+    const open=!!(activeConns[c.id]&&activeConns[c.id].open);
+    const opt=document.createElement('option');
+    opt.value=c.id;
+    opt.textContent=(open?'● ':'○ ')+c.name+(c.unread?` [${c.unread}]`:'');
+    sel.appendChild(opt);
+  });
+  if(prev)sel.value=prev;
+  const pid=currentContact?currentContact.id:null;
+  const open=pid&&activeConns[pid]&&activeConns[pid].open;
+  const qlen=pid?(msgQueue[pid]||[]).length:0;
+  const inp=g('cqInput');
+  const sendBtn=g('cqSend');
+  const callBtn=g('cqCall');
+  if(!pid){
+    inp.disabled=true; inp.placeholder='連絡先を選択してください...';
+    sendBtn.disabled=true; callBtn.disabled=true;
+  } else {
+    if(pid)sel.value=pid;
+    inp.disabled=false;
+    inp.placeholder=qlen?`📦${qlen}件 送信待ち...`:'メッセージ入力... (Enter送信)';
+    sendBtn.disabled=false;
+    callBtn.disabled=!open;
+  }
+  // bodyのpadding-bottomをバーの高さに合わせる
+  const bar=g('chatQuickBar');
+  if(bar) document.body.style.paddingBottom=bar.offsetHeight+'px';
+}
 
+function cqSelChange(){
+  const pid=g('cqSel').value;
+  if(!pid){currentContact=null;updateFooter();return;}
+  const c=contacts.find(x=>x.id===pid);
+  if(!c)return;
+  currentContact=c;
+  if(c.unread){c.unread=0;chatSave();updateNotifBar();}
+  updateFooter();
+  if(g('chatWindow').classList.contains('open'))openChat(c);
+}
+
+function cqSend(){
+  if(!currentContact)return;
+  const inp=g('cqInput');
+  const text=inp.value.trim();
+  if(!text)return;
+  const pid=currentContact.id;
+  const conn=activeConns[pid];
+  const now=nowStr();
+  if(conn&&conn.open){
+    conn.send(text);
+    if(!chatHistory[pid])chatHistory[pid]=[];
+    chatHistory[pid].unshift({type:'mine',text,time:now});
+  } else {
+    if(!msgQueue[pid])msgQueue[pid]=[];
+    msgQueue[pid].push({text,time:now});
+    if(!chatHistory[pid])chatHistory[pid]=[];
+    chatHistory[pid].unshift({type:'mine',text,time:now,pending:true});
+    addSysMsg(pid,'📦 送信待ちに追加しました');
+  }
+  chatSave();
+  inp.value=''; inp.style.height='';
+  if(currentContact&&currentContact.id===pid)renderMsgs(pid);
+  updateFooter();
+}
+
+function copyMyId(){
   const id=g('myPeerId').textContent;
   if(!id||id==='接続中...')return;
   navigator.clipboard.writeText(id).then(()=>{
