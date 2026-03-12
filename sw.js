@@ -1,38 +1,39 @@
-const CACHE = 'tenki-v1';
-const ASSETS = [
-  './weather-app.html',
-  './manifest.json'
-];
+// Service Worker for 天気まとめ PWA
+const CACHE_NAME = 'tenki-v1';
 
+// インストール時：キャッシュは最小限（外部リソースはキャッシュしない）
 self.addEventListener('install', e => {
-  e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(ASSETS))
-  );
   self.skipWaiting();
 });
 
 self.addEventListener('activate', e => {
-  e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    )
-  );
-  self.clients.claim();
+  e.waitUntil(clients.claim());
 });
 
+// フェッチ：天気API・PeerJSはネットワーク優先、それ以外はキャッシュ優先
 self.addEventListener('fetch', e => {
-  const url = e.request.url;
-  // 天気APIは常にネットワーク優先
-  if (url.includes('open-meteo.com') || url.includes('fonts.googleapis.com')) {
-    e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
-    return;
+  // 外部APIは常にネットワーク
+  if (e.request.url.includes('googleapis') ||
+      e.request.url.includes('openweathermap') ||
+      e.request.url.includes('jma.go.jp') ||
+      e.request.url.includes('peerjs') ||
+      e.request.url.includes('peerserver') ||
+      e.request.url.includes('unpkg.com') ||
+      e.request.url.includes('cdnjs')) {
+    return; // デフォルトのネットワーク fetch
   }
-  // その他はキャッシュ優先
-  e.respondWith(
-    caches.match(e.request).then(cached => cached || fetch(e.request).then(res => {
-      const clone = res.clone();
-      caches.open(CACHE).then(c => c.put(e.request, clone));
-      return res;
-    }))
-  );
+});
+
+// メインスレッドからのバッジ更新メッセージを受け取る
+self.addEventListener('message', e => {
+  if (e.data && e.data.type === 'UPDATE_BADGE') {
+    const count = e.data.count || 0;
+    if ('setAppBadge' in navigator) {
+      if (count > 0) {
+        navigator.setAppBadge(count).catch(() => {});
+      } else {
+        navigator.clearAppBadge().catch(() => {});
+      }
+    }
+  }
 });
