@@ -23,7 +23,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .stars{position:fixed;inset:0;pointer-events:none;z-index:0;}
 .star{position:absolute;background:#fff;border-radius:50%;animation:twinkle var(--d,3s) var(--delay,0s) infinite alternate;}
 @keyframes twinkle{from{opacity:.1}to{opacity:.8}}
-.wrap{position:relative;z-index:1;max-width:480px;margin:0 auto;padding:0 14px 64px;}
+.wrap{position:relative;z-index:1;max-width:480px;margin:0 auto;padding:0 14px 80px;}
 
 /* ── Header ── */
 .app-header{display:flex;align-items:center;justify-content:space-between;padding:14px 0 6px;}
@@ -288,7 +288,25 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .chat-add-input{flex:1;min-width:100px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:8px 10px;color:var(--text);font-size:12px;font-family:'Noto Sans JP',sans-serif;outline:none;}
 .chat-add-input:focus{border-color:var(--accent);}
 .chat-add-btn{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:9px;padding:8px 12px;color:#000;font-weight:700;font-size:12px;cursor:pointer;}
-/* chat window */
+/* ── 固定フッター（メッセージ入力＋電話） ── */
+.fixed-footer{position:fixed;bottom:0;left:0;right:0;z-index:1000;background:rgba(5,13,26,.96);backdrop-filter:blur(12px);border-top:1px solid rgba(0,212,255,.15);padding:8px 12px;display:flex;align-items:flex-end;gap:8px;max-width:100%;}
+.fixed-footer::before{content:'';position:absolute;inset:0;pointer-events:none;}
+.footer-contact-lbl{font-size:10px;color:var(--accent);font-family:'Space Mono',monospace;white-space:nowrap;margin-bottom:3px;letter-spacing:.05em;overflow:hidden;text-overflow:ellipsis;max-width:120px;}
+.footer-left{flex:1;min-width:0;display:flex;flex-direction:column;}
+.footer-msg-input{width:100%;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:9px 13px;color:var(--text);font-size:14px;font-family:'Noto Sans JP',sans-serif;outline:none;resize:none;max-height:80px;line-height:1.4;}
+.footer-msg-input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(0,212,255,.1);}
+.footer-msg-input.no-contact{border-color:rgba(255,255,255,.07);color:var(--muted);}
+.footer-btns{display:flex;flex-direction:column;gap:6px;flex-shrink:0;}
+.footer-send-btn{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:12px;width:42px;height:42px;color:#000;font-weight:700;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.footer-send-btn:disabled{opacity:.35;cursor:not-allowed;}
+.footer-call-btn{background:linear-gradient(135deg,#4caf50,#66bb6a);border:none;border-radius:12px;width:42px;height:42px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 0 8px rgba(76,175,80,.3);}
+.footer-call-btn:disabled{opacity:.35;cursor:not-allowed;}
+.footer-call-btn.incall{background:linear-gradient(135deg,var(--accent3),#ff4444);}
+/* チャット画面内の入力行は非表示（フッターに移動したため） */
+.chat-input-row{display:none;}
+/* チャットメッセージエリアの高さ調整 */
+.chat-window{height:calc(100vh - 240px);}
+.chat-messages{flex:1;}
 .chat-window{display:none;flex-direction:column;background:var(--card);border:1px solid rgba(0,212,255,.2);border-radius:14px;overflow:hidden;height:calc(100vh - 180px);min-height:400px;}
 .chat-window.open{display:flex;}
 .chat-win-header{background:linear-gradient(135deg,rgba(0,212,255,.1),rgba(123,104,238,.08));border-bottom:1px solid rgba(255,255,255,.07);padding:9px 13px;display:flex;align-items:center;gap:9px;}
@@ -674,6 +692,18 @@ body.has-notif .wrap{padding-top:42px;}
 </div>
 
 </div><!-- /wrap -->
+
+<!-- ── 固定フッター（常時表示） ── -->
+<div class="fixed-footer" id="fixedFooter">
+  <div class="footer-left">
+    <div class="footer-contact-lbl" id="footerContactLbl">連絡先を選択してください</div>
+    <textarea class="footer-msg-input" id="footerMsgInput" placeholder="連絡先を選んでメッセージ入力..." rows="1" onkeydown="footerKeyDown(event)" oninput="footerAutoResize(this)"></textarea>
+  </div>
+  <div class="footer-btns">
+    <button class="footer-send-btn" id="footerSendBtn" onclick="footerSend()" disabled title="送信">➤</button>
+    <button class="footer-call-btn" id="footerCallBtn" onclick="footerCall()" disabled title="音声通話">📞</button>
+  </div>
+</div>
 
 <!-- 未登録からの着信モーダル -->
 <div class="incoming-modal" id="incomingModal">
@@ -1398,16 +1428,15 @@ function refreshChatUI(){
   if(!currentContact)return;
   const open=!!(activeConns[currentContact.id]&&activeConns[currentContact.id].open);
   setWinStatus(open?'connected':'disconnected', open?'接続済み ✅':'未接続（送信待ち保存中）');
-  // 未接続でも入力・送信は常に有効
   g('chatMsgInput').disabled=false;
   g('chatSendBtn').disabled=false;
   const cb=g('callBtn'); if(cb)cb.disabled=!open;
-  // 送信待ち件数をプレースホルダーで表示
   const pid=currentContact.id;
   const qlen=(msgQueue[pid]||[]).length;
   g('chatMsgInput').placeholder=qlen>0
     ? `📦 ${qlen}件 送信待ち中... (Enterで追加)`
     : 'メッセージを入力... (Enterで送信)';
+  updateFooter();
 }
 
 function acceptIncoming(){
@@ -1480,12 +1509,13 @@ function openChat(contact){
   renderMsgs(contact.id); refreshChatUI();
   g('chat-list-view').style.display='none';
   g('chatWindow').classList.add('open');
-  g('chatMsgInput').focus();
+  updateFooter();
+  g('footerMsgInput').focus();
 }
 function closeChat(){
   g('chatWindow').classList.remove('open');
   g('chat-list-view').style.display='';
-  currentContact=null; renderContacts();
+  currentContact=null; renderContacts(); updateFooter();
 }
 function setWinStatus(cls,text){
   const el=g('chatWinStatus');
@@ -1716,7 +1746,55 @@ function toggleSpeaker(){
   b.style.opacity=b.style.opacity==='0.5'?'1':'0.5';
 }
 
-function copyMyId(){
+// ── 固定フッター ──
+function updateFooter(){
+  const inp=g('footerMsgInput');
+  const lbl=g('footerContactLbl');
+  const sendBtn=g('footerSendBtn');
+  const callBtn=g('footerCallBtn');
+  if(!currentContact){
+    lbl.textContent='連絡先を選択してください';
+    inp.placeholder='連絡先を選んでメッセージ入力...';
+    inp.classList.add('no-contact');
+    sendBtn.disabled=true;
+    callBtn.disabled=true;
+    return;
+  }
+  const pid=currentContact.id;
+  const open=!!(activeConns[pid]&&activeConns[pid].open);
+  const qlen=(msgQueue[pid]||[]).length;
+  lbl.textContent=(currentContact.emoji||'')+'  '+currentContact.name+(open?' ● 接続中':' ○ 未接続');
+  inp.placeholder=qlen>0?`📦 ${qlen}件 送信待ち中... (Enterで追加)`:'メッセージを入力... (Enterで送信)';
+  inp.classList.remove('no-contact');
+  sendBtn.disabled=false; // 未接続でも入力可
+  callBtn.disabled=!open;
+  callBtn.classList.toggle('incall',!!currentCall);
+}
+
+function footerSend(){
+  // footerMsgInputの内容でsendMsgを呼ぶ
+  if(!currentContact)return;
+  const inp=g('footerMsgInput');
+  // chatMsgInputに値を移してsendMsgを呼ぶ
+  g('chatMsgInput').value=inp.value;
+  sendMsg();
+  inp.value='';
+  inp.style.height='';
+  updateFooter();
+}
+
+function footerCall(){
+  startCall();
+}
+
+function footerKeyDown(e){
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();footerSend();}
+}
+
+function footerAutoResize(el){
+  el.style.height='auto';
+  el.style.height=Math.min(el.scrollHeight,80)+'px';
+}
   const id=g('myPeerId').textContent;
   if(!id||id==='接続中...')return;
   navigator.clipboard.writeText(id).then(()=>{
@@ -1872,6 +1950,7 @@ window.addEventListener('load',()=>{
   if(hm)hm.innerHTML=`${getMoonEmoji(age)}<br>${getMoonName(age)}<br><span style="font-size:9px;opacity:.7">月齢${age.toFixed(0)}</span>`;
   // チャット：バックグラウンドで接続開始
   initPeer();
+  updateFooter();
   // 最初のタップでAudioContextをアンロック
   document.addEventListener('touchstart',()=>{try{getAudioCtx();}catch(e){}},{once:true});
   document.addEventListener('click',()=>{try{getAudioCtx();}catch(e){}},{once:true});
