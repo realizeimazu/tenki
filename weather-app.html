@@ -1354,7 +1354,7 @@ function bindConn(conn){
     addSysMsg(pid,'接続しました 🎉');
     flushQueue(pid,conn); // 送信待ちを即フラッシュ
     if(currentContact&&currentContact.id===pid)refreshChatUI();
-    conn._ping=setInterval(()=>{if(conn.open)try{conn.send({__ping:true});}catch(e){}else clearInterval(conn._ping);},30000);
+    conn._ping=setInterval(()=>{if(conn.open)try{conn.send({__ping:true});}catch(e){}else{clearInterval(conn._ping);schedConnect(pid,1000);}},15000);
   });
   conn.on('data',data=>{
     if(data&&data.__ping)return;
@@ -1870,12 +1870,70 @@ window.addEventListener('load',()=>{
   const age=getMoonAge(new Date());
   const hm=g('header-moon');
   if(hm)hm.innerHTML=`${getMoonEmoji(age)}<br>${getMoonName(age)}<br><span style="font-size:9px;opacity:.7">月齢${age.toFixed(0)}</span>`;
-  // チャット：バックグラウンドで接続開始（タブを開かなくても着信・受信できる）
+  // チャット：バックグラウンドで接続開始
   initPeer();
   // 最初のタップでAudioContextをアンロック
   document.addEventListener('touchstart',()=>{try{getAudioCtx();}catch(e){}},{once:true});
   document.addEventListener('click',()=>{try{getAudioCtx();}catch(e){}},{once:true});
 });
+
+// ══════════════════════════════════════════
+// 接続維持：バックグラウンド・復帰時の再接続
+// ══════════════════════════════════════════
+
+// ── 全接続を一斉チェック・修復 ──
+function healAllConns(){
+  if(!myPeer||myPeer.destroyed)return;
+  // PeerJS自体が切れていたら再接続
+  if(myPeer.disconnected){
+    try{myPeer.reconnect();}catch(e){myPeer=null;initPeer();return;}
+  }
+  // 各連絡先との接続を確認
+  contacts.forEach(c=>{
+    const conn=activeConns[c.id];
+    if(!conn||!conn.open) schedConnect(c.id,0);
+  });
+}
+
+// ── タブが前面に戻ったとき ──
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'){
+    // 画面復帰時に即座に接続チェック
+    healAllConns();
+  }
+});
+
+// ── ウィンドウがフォーカスを得たとき（別アプリから戻った場合など） ──
+window.addEventListener('focus',()=>{
+  healAllConns();
+});
+
+// ── ネットワーク復帰時（機内モード解除・LTE→WiFi切替など） ──
+window.addEventListener('online',()=>{
+  setPeerStatus('','ネットワーク復帰 — 再接続中...');
+  // 少し待ってから接続（ネットワーク安定待ち）
+  setTimeout(()=>healAllConns(), 1500);
+});
+
+window.addEventListener('offline',()=>{
+  setPeerStatus('','オフライン');
+});
+
+// ── 定期ヘルスチェック（30秒ごと）──
+// バックグラウンドではsetIntervalが間引かれるが、復帰時に補完される
+setInterval(()=>{
+  if(document.visibilityState==='visible') healAllConns();
+}, 30000);
+
+// ── Page Freeze/Resume（モバイルでブラウザが一時停止された場合） ──
+window.addEventListener('pageshow', e=>{
+  // bfcache（戻る/進む）からの復帰も含む
+  if(e.persisted) healAllConns();
+});
+if('onfreeze' in document){
+  // Chrome系：ページがフリーズ解除されたら再接続
+  document.addEventListener('resume',()=>healAllConns());
+}
 </script>
 </body>
 </html>
